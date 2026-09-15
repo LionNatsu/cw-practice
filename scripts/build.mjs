@@ -88,9 +88,16 @@ async function main() {
     count++;
   }
 
-  // index.html：入口与样式路径换成构建产物（相对路径，方便部署到子目录）
+  // index.html：入口与样式路径换成构建产物。
+  // 必须生成相对路径（./main.js），并且**不能**留下 "/./main.js" 这种形式 ——
+  // 那会被浏览器当成域名根的绝对路径，部署在项目子目录下就 404（白屏）。
   const html = await readFile(path.join(root, 'index.html'), 'utf8');
-  const builtHtml = html.replace('src/styles.css', './styles.css').replace('src/main.ts', './main.js');
+  const builtHtml = html
+    .replace(/(href|src)="\/?src\/styles\.css"/g, '$1="./styles.css"')
+    .replace(/(href|src)="\/?src\/main\.ts"/g, '$1="./main.js"');
+  if (builtHtml.includes('/src/') || /["']\/\.\//.test(builtHtml)) {
+    throw new Error(`index.html 里仍留有绝对路径，部署到子目录会 404:\n${builtHtml}`);
+  }
   await writeFile(path.join(outDir, 'index.html'), builtHtml, 'utf8');
 
   console.log(`[build] 完成：${count} 个源文件 → dist/`);

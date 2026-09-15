@@ -27,6 +27,10 @@
       <div id="toasts" class="toasts"></div>
       <div id="modal-root"></div>
     </div>
-    <script type="module" src="/src/main.ts"></script>
+    <!-- 开发时由 Vite 直接处理 src/main.ts；构建（vite 或 scripts/build.mjs）
+         会把这一行换成相对路径 ./main.js。两个都必须写成相对路径，
+         否则部署到 GitHub Pages 的项目子目录下会 404（浏览器会当成绝对路径
+         去域名根找，结果就是一片空白）。 -->
+    <script type="module" src="src/main.ts"></script>
   </body>
 </html>

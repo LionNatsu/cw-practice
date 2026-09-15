@@ -33,6 +33,8 @@ jobs:
         run: node scripts/build.mjs
       - name: 冒烟测试（最小 DOM 桩，真跑一遍构建产物）
         run: node tests/dom-smoke.mjs dist
+      - name: 产物自检（防止再发出白屏站点）
+        run: node scripts/verify-dist.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
