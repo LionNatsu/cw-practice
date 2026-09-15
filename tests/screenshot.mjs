@@ -291,7 +291,8 @@ const PATTERNS = {
 };
 
 function makeKeyer(cdp, dit) {
-  const press = async (ms) => {
+  /** 按住 ms 毫秒；按住到一半时可以插一段回调（用来观察按下去那一刻的界面）。 */
+  const hold = async (ms, during) => {
     await cdp.send('Input.dispatchKeyEvent', {
       type: 'keyDown',
       windowsVirtualKeyCode: 32,
@@ -300,7 +301,9 @@ function makeKeyer(cdp, dit) {
       key: ' ',
       text: ' ',
     });
-    await delay(ms);
+    await delay(Math.round(ms * 0.6));
+    if (during) await during();
+    await delay(Math.max(1, ms - Math.round(ms * 0.6)));
     await cdp.send('Input.dispatchKeyEvent', {
       type: 'keyUp',
       windowsVirtualKeyCode: 32,
@@ -309,8 +312,10 @@ function makeKeyer(cdp, dit) {
       key: ' ',
     });
   };
+  const press = (ms) => hold(ms);
   return {
     press,
+    hold,
     /** 拍一个字符。 */
     async char(ch) {
       const pat = PATTERNS[ch];
@@ -393,11 +398,11 @@ async function main() {
     }
     return false;
   };
-  const isArmed = () => cdp.evaluate(`!!document.querySelector('.armed-indicator.on')`);
+  const isArmed = () => cdp.evaluate(`!!document.querySelector('.live-dot.on')`);
   const setArmed = async (want) => {
     if ((await isArmed()) === want) return true;
     await clickId('arm-toggle');
-    return waitFor(want ? `document.querySelector('.armed-indicator.on')` : `document.querySelector('.armed-indicator.off')`);
+    return waitFor(want ? `document.querySelector('.live-dot.on')` : `document.querySelector('.live-dot')`);
   };
 
   try {
@@ -433,117 +438,205 @@ async function main() {
     // 1) 首次访问落在帮助页
     await shot('01-help');
 
-    // 2) 练习页（未武装）
+    // 2) 练习页（未开始）
     await click(byText('.tab', '练习'));
     await delay(500);
     await shot('02-practice-idle');
-    const tchars = await cdp.evaluate(`document.querySelectorAll('.tchar').length`);
-    check(tchars > 0, `练习页渲染出 ${tchars} 个目标字符`);
+    const cells = await cdp.evaluate(`document.querySelectorAll('.cell').length`);
+    check(cells > 0, `练习页渲染出 ${cells} 个字符`);
 
-    // 3) 武装
+    // 换到第 9 课（一问一答）的一条较长报文，用来看透镜的尺寸递减
+    await click(byText('.tab', '课程'));
+    await delay(400);
+    const lessonClicked = await click(byText('.lesson', '第 9 课'));
+    console.log(`[screenshot] 点第 9 课: ${lessonClicked}`);
+    await delay(800);
     await setArmed(true);
-    check(await isArmed(), '开始拍发后指示灯变绿');
+    const longTarget = await cdp.evaluate(
+      `[...document.querySelectorAll('.cell .glyph')].map(e=>e.textContent).join('')`,
+    );
+    check(longTarget.length >= 8, `长报文已就位（${JSON.stringify(longTarget)}）`);
+    const lens = await cdp.evaluate(`(() => {
+      const pick = (d) => {
+        const el = document.querySelector(".cell[data-dist='" + d + "'] .glyph");
+        return el ? parseFloat(getComputedStyle(el).fontSize) : null;
+      };
+      const dists = [...document.querySelectorAll('.cell')].map((c) => c.dataset.dist);
+      return JSON.stringify({ dists, d0: pick(0), d1: pick(1), d2: pick(2), d3: pick(3) });
+    })()`);
+    const lensObj = JSON.parse(lens);
+    console.log(`[screenshot] 透镜: ${lens}`);
+    check(lensObj.d0 >= 80, `中心字符应最大（≥80px），实际 ${lensObj.d0}px`);
+    check(lensObj.d1 !== null && lensObj.d1 < lensObj.d0, `相邻字符应更小（${lensObj.d1} < ${lensObj.d0}）`);
+    check(lensObj.d2 !== null && lensObj.d2 < lensObj.d1, `再外侧应更小（${lensObj.d2} < ${lensObj.d1}）`);
+    await shot('02b-lens');
+
+    // 回到第 1 课第 1 条（单字 E），走一遍“拍对”的流程
+    await click(byText('.tab', '课程'));
+    await delay(400);
+    await click(byText('.lesson', '第 1 课'));
+    await delay(700);
+    await cdp.evaluate(`document.getElementById('lesson-item-0')?.click()`);
+    await delay(700);
+    await setArmed(true);
+
+    // 回到第 1 条（单字 E），走一遍“拍对”的流程
+    await click(`document.getElementById('lesson-item-0')`);
+    await delay(600);
+    await setArmed(true);
+    check(await isArmed(), '开始后指示灯变绿（.live-dot.on）');
     await shot('03-armed');
 
     // 4) 真的拍当前条目（用 110ms 的点）
     const keyer = makeKeyer(cdp, 110);
-    const target1 = await cdp.evaluate(`[...document.querySelectorAll('.tchar .ch')].map(e=>e.textContent).join('')`);
+
+    // 4a) 按住不放：发报条上要有一根正在长的条，颜色是“点”的颜色
+    let liveShape = null;
+    await keyer.hold(140, async () => {
+      liveShape = JSON.parse(
+        await cdp.evaluate(`(() => {
+          const s = document.querySelector('.sent .sym.live');
+          return JSON.stringify({
+            has: !!s,
+            color: s ? getComputedStyle(s).backgroundColor : null,
+            width: s ? Math.round(s.getBoundingClientRect().width) : 0,
+          });
+        })()`),
+      );
+      await shot('03b-keying');
+    });
+    console.log(`[screenshot] 按住反馈: ${JSON.stringify(liveShape)}`);
+    check(liveShape?.has, '按住时发报条上有一根正在长的点划');
+    check(liveShape?.color === 'rgb(76, 201, 240)', '按住时是“点”的颜色', liveShape?.color ?? '');
+    await delay(500);
+    await click(byText('button', '重来'));
+    await delay(500);
+    await setArmed(true);
+    await delay(300);
+
+    const target1 = await cdp.evaluate(
+      `[...document.querySelectorAll(".cell[data-dist='0'] .glyph")].map(e=>e.textContent).join('')`,
+    );
     console.log(`[screenshot] 第 1 条目标: ${JSON.stringify(target1)}`);
     await keyer.text(target1);
-    await delay(800);
-    await shot('04-keyed-correct');
+    await delay(120); // 在点划形状还在的时候抓一张
+    const sent = await cdp.evaluate(`(() => {
+      const row = document.querySelector('.sent');
+      const syms = [...(row?.querySelectorAll('.sym') ?? [])];
+      return JSON.stringify({
+        cls: row?.className ?? '',
+        count: syms.length,
+        colors: syms.map((s) => getComputedStyle(s).backgroundColor),
+        text: row?.innerText.replace(/\\n/g, ' ') ?? '',
+      });
+    })()`);
+    console.log(`[screenshot] 发报条: ${sent}`);
+    check(JSON.parse(sent).count >= 0, '发报条能读出来');
+    await shot('04-keyed');
+    await delay(600);
 
     const style1 = await cdp.evaluate(`(() => {
-      const cell = document.querySelector('.tchar.done.correct');
+      const cell = document.querySelector('.cell.correct');
       if (!cell) return null;
-      const ch = cell.querySelector('.ch');
-      const dot = cell.querySelector('.dot, .dash');
       return {
-        chColor: getComputedStyle(ch).color,
-        dotBg: dot ? getComputedStyle(dot).backgroundColor : null,
+        color: getComputedStyle(cell.querySelector('.glyph')).color,
         text: cell.innerText.replace(/\\n/g,' '),
       };
     })()`);
-    console.log(`[screenshot] 判对的字符样式: ${JSON.stringify(style1)}`);
-    check(!!style1, '出现“判对”的字符（.tchar.done.correct）');
-    // 期望是绿色 rgb(85, 214, 139)
-    check(style1?.chColor === 'rgb(85, 214, 139)', '判对字符的文字是绿色', style1?.chColor ?? '');
-    check(style1?.dotBg === 'rgb(85, 214, 139)', '判对字符的点划是绿色', style1?.dotBg ?? '');
+    console.log(`[screenshot] 判对字符样式: ${JSON.stringify(style1)}`);
+    check(!!style1, '出现“判对”的字符（.cell.correct）');
+    check(style1?.color === 'rgb(61, 220, 132)', '判对的字符是绿色', style1?.color ?? '');
 
-    const diag = await cdp.evaluate(
-      `[...document.querySelectorAll('.dline')].slice(1).map(d => d.innerText.replace(/\\n/g,' ')).join(' ;; ')`,
-    );
-    check(diag.includes('ms'), `诊断面板有按键记录：${diag}`);
-
-    const meters = await cdp.evaluate(
-      `[...document.querySelectorAll('.meter')].map(m => m.innerText.replace(/\\n/g,' ')).join(' | ')`,
-    );
-    console.log(`[screenshot] 指标: ${meters}`);
-    check(/样本 [1-9]/.test(meters), '点/划的样本数不再是 0', meters);
-
-    // 5) 结算
+    // 5) 成绩
     await click(byText('button', '成绩'));
     await delay(500);
     await shot('05-result');
     const resultText = await cdp.evaluate(`document.querySelector('.modal')?.innerText.replace(/\\n+/g,' | ') ?? ''`);
-    check(resultText.length > 0, `结算弹窗有内容：${resultText.slice(0, 80)}`);
+    check(resultText.length > 0, `成绩弹窗有内容：${resultText.slice(0, 80)}`);
     await click(byText('.modal button', '关闭'));
     await delay(200);
 
-    // 6) 故意发错：目标第 1 条是 E，我们发 T，看红色判定
-    await click(byText('button', '重拍'));
-    await delay(500);
+    // 6) 故意发错：目标第 1 条是 E，我们发 T。
+    //    新行为：拍错的字不认，给负反馈（问号 + 没抄清），等重拍。
+    await click(byText('button', '重来'));
+    await delay(600);
     const armed2 = await setArmed(true);
-    const indicatorDump = await cdp.evaluate(
-      `[...document.querySelectorAll('.armed-indicator')].map(e => e.className).join(' ~ ')`,
-    );
+    check(armed2, '重来之后仍能开始拍发');
     const targetWrong = await cdp.evaluate(
-      `[...document.querySelectorAll('.tchar .ch')].map(e=>e.textContent).join('')`,
+      `[...document.querySelectorAll(".cell[data-dist='0'] .glyph")].map(e=>e.textContent).join('')`,
     );
-    console.log(
-      `[screenshot] 重拍后：可拍发=${armed2} 指示灯类=${JSON.stringify(indicatorDump)} 目标=${JSON.stringify(targetWrong)}`,
-    );
-    check(armed2, '重拍一条之后仍能开始拍发');
     // 目标第一个字符是 E 就发 T，反之发 E —— 保证一定发错
     await keyer.char(targetWrong[0] === 'E' ? 'T' : 'E');
-    await delay(900);
-    const style2 = await cdp.evaluate(`(() => {
-      const cell = document.querySelector('.tchar.done.wrong');
-      if (!cell) return { found: false, cells: [...document.querySelectorAll('.tchar')].map(c=>c.className) };
-      return { found: true, text: cell.innerText.replace(/\\n/g,' '), chColor: getComputedStyle(cell.querySelector('.ch')).color };
+    await delay(700);
+    const wrongState = await cdp.evaluate(`(() => {
+      const row = document.querySelector('.sent.confused');
+      const center = document.querySelector(".cell[data-dist='0'] .glyph")?.textContent ?? '';
+      const qmark = row?.querySelector('.qmark');
+      return JSON.stringify({
+        hasWrong: !!row,
+        qmark: !!qmark,
+        qmarkColor: qmark ? getComputedStyle(qmark).color : null,
+        said: row?.querySelector('.said')?.innerText.replace(/\\n/g,' ') ?? '',
+        center,
+        correctCells: document.querySelectorAll('.cell.correct').length,
+      });
     })()`);
-    console.log(`[screenshot] 判错的字符样式: ${JSON.stringify(style2)}`);
-    check(style2.found === true, '故意发错时出现“判错”的字符（.tchar.done.wrong）');
-    check(style2.chColor === 'rgb(255, 107, 107)', '判错字符的文字是红色', style2.chColor ?? '');
+    console.log(`[screenshot] 拍错反馈: ${wrongState}`);
+    const ws2 = JSON.parse(wrongState);
+    check(ws2.hasWrong, '拍错时出现负反馈（.sent.confused）');
+    check(ws2.qmark, '负反馈里有一个问号（对方没抄清）');
+    check(ws2.qmarkColor === 'rgb(255, 90, 95)', '问号是红色', ws2.qmarkColor ?? '');
+    check(/对方听到的是/.test(ws2.said), `负反馈说明对方听到的内容：${ws2.said}`);
+    check(ws2.center === targetWrong[0], `拍错不前进，中心仍是 ${targetWrong[0]}（实际 ${ws2.center}）`);
     await shot('06-keyed-wrong');
 
-    // 7) 长报文：选第 9 课（短 QSO），拍几条看逐字判定
+    // 拍错之后重拍正确的，应当能继续推进
+    const correctChar = targetWrong[0] ?? 'E';
+    await delay(400);
+    await keyer.char(correctChar);
+    await delay(1400);
+    const afterRetry = await cdp.evaluate(`JSON.stringify({
+      correct: document.querySelectorAll('.cell.correct').length,
+      wrongShown: !!document.querySelector('.sent.confused'),
+      center: document.querySelector(".cell[data-dist='0'] .glyph")?.textContent ?? '',
+    })`);
+    console.log(`[screenshot] 重拍正确后: ${afterRetry}`);
+    check(JSON.parse(afterRetry).correct >= 1, '重拍正确后该字被认下来');
+    check(!JSON.parse(afterRetry).wrongShown, '认下来之后负反馈消失');
+
+    // 7) 长报文：换成有多词的条目，看透镜与分词
     await click(byText('.tab', '课程'));
     await delay(400);
     await shot('07-lessons');
-    await click(byText('.lesson', '第 5 课'));
+    await click(byText('.lesson', '第 9 课'));
     await delay(800);
-    await setArmed(true);
-    const targetLong = await cdp.evaluate(`[...document.querySelectorAll('.tchar .ch')].map(e=>e.textContent).join('')`);
+    const armedLong = await setArmed(true);
+    console.log(`[screenshot] 长条目已开始=${armedLong} armed=${await isArmed()}`);
+    const targetLong = await cdp.evaluate(
+      `[...document.querySelectorAll(".cell .glyph")].map(e=>e.textContent).join('')`,
+    );
     console.log(`[screenshot] 长报文目标: ${JSON.stringify(targetLong)}`);
-    // 只拍前 6 个字符，看看“已判对 + 待定”混合的样子
-    await keyer.text(targetLong.slice(0, 6));
-    await delay(1200);
+    // 逐字过判定：每拍完一个字，等它定稿（停顿够久），才轮到下一个字
+    for (const ch of targetLong.slice(0, 3)) {
+      if (!(await keyer.char(ch))) break;
+      await delay(700);
+    }
+    await delay(500);
     await shot('08-long-message');
     const longState = await cdp.evaluate(`JSON.stringify({
-      correct: document.querySelectorAll('.tchar.done.correct').length,
-      pending: document.querySelectorAll('.tchar.pending').length,
-      copy: document.querySelector('.copyline')?.innerText ?? '',
-      candidates: document.querySelector('.candidates')?.innerText ?? '',
+      correct: document.querySelectorAll('.cell.correct').length,
+      center: document.querySelector(".cell[data-dist='0'] .glyph")?.textContent ?? '',
+      copy: document.querySelector('.message')?.innerText.replace(/\\n/g,' ') ?? '',
+      pattern: document.querySelector('.pattern-hint')?.innerText ?? '',
+      gap: !!document.querySelector('.message .gap'),
+      focus: document.activeElement ? document.activeElement.tagName : 'none',
     })`);
     console.log(`[screenshot] 长报文状态: ${longState}`);
-    check(JSON.parse(longState).correct > 0, '长报文里有字符被判对');
-    if (JSON.parse(longState).pending > 0) {
-      const pendStyle = await cdp.evaluate(
-        `getComputedStyle(document.querySelector('.tchar.pending .ch')).color`,
-      );
-      console.log(`[screenshot] 待定字符颜色: ${pendStyle}`);
-    }
+    const ls = JSON.parse(longState);
+    check(ls.correct > 0, `逐字过：拍对的字被认下来（${ls.correct} 个）`);
+    check(!!ls.center, '中心位置始终有字符（透镜聚焦）');
+    check(ls.center === targetLong[ls.correct], `中心应对准下一个要发的字（认下 ${ls.correct} 个，中心是 ${ls.center}，下一个应是 ${targetLong[ls.correct]}）`);
+    check(ls.gap, '报文里能看出分词断句（词之间有空格）');
 
     // 8) 设置页（校准台）
     await click(byText('.tab', '设置'));

@@ -157,16 +157,37 @@ class Element {
   matches(sel) {
     for (const one of String(sel).split(',').map((s) => s.trim())) {
       if (!one) continue;
-      // 支持简单的复合选择器：.a.b / #id / tag / tag.a
-      if (one.startsWith('.') && one.includes('.')) {
-        const parts = one.split('.').filter(Boolean);
-        if (parts.every((p) => this._classes.has(p))) return true;
-        continue;
-      }
-      if (one.startsWith('.') && this._classes.has(one.slice(1))) return true;
-      if (one.startsWith('#') && this.id === one.slice(1)) return true;
-      if (/^[a-z]+$/i.test(one) && this.tagName === one.toUpperCase()) return true;
+      // 支持后代选择器（.a .b）与简单复合选择器（.a.b / #id / tag.a）
+      const parts = one.split(/\s+/).filter(Boolean);
+      if (this._matchesChain(parts)) return true;
     }
+    return false;
+  }
+  _matchesChain(parts) {
+    if (!this._matchesSimple(parts[parts.length - 1])) return false;
+    let node = this.parentNode;
+    for (let i = parts.length - 2; i >= 0; i--) {
+      let found = false;
+      while (node) {
+        if (node.nodeType === 1 && node._matchesSimple(parts[i])) {
+          found = true;
+          node = node.parentNode;
+          break;
+        }
+        node = node.parentNode;
+      }
+      if (!found) return false;
+    }
+    return true;
+  }
+  _matchesSimple(one) {
+    if (one.startsWith('.') && one.includes('.')) {
+      const parts = one.split('.').filter(Boolean);
+      return parts.every((p) => this._classes.has(p));
+    }
+    if (one.startsWith('.') && this._classes.has(one.slice(1))) return true;
+    if (one.startsWith('#') && this.id === one.slice(1)) return true;
+    if (/^[a-z]+$/i.test(one) && this.tagName === one.toUpperCase()) return true;
     return false;
   }
   querySelector(sel) {
@@ -192,6 +213,7 @@ class Element {
     return out;
   }
   focus() {}
+  blur() {}
 }
 
 class Document extends Element {
@@ -415,52 +437,53 @@ check(!!practiceTab, '找到“练习” tab');
 practiceTab?.click();
 advance(60);
 
-const tchars = document.querySelectorAll('.tchar');
+const tchars = document.querySelectorAll('.cell');
 check(tchars.length > 0, `目标字符渲染出来了（${tchars.length} 个）`);
-check(document.querySelectorAll('.keypad').length === 1, '手键区渲染出来了');
-check(document.querySelectorAll('.meter').length >= 6, `实时指标渲染出来了（${document.querySelectorAll('.meter').length} 个）`);
-check(document.querySelectorAll('.diag').length === 1, '诊断面板渲染出来了');
+check(document.querySelectorAll('.stage').length === 1, '手键区渲染出来了');
+check(document.querySelectorAll('.pattern-hint').length === 1, '当前字符的码形提示渲染出来了');
+check(document.querySelectorAll('.sent').length === 1, '发报条（点划反馈）渲染出来了');
+check(document.querySelectorAll('.message').length === 1, '报文全文渲染出来了');
+check(document.querySelectorAll('.practice-foot')[0]?.childElementCount >= 4, '底部动作按钮渲染出来了');
 if (tchars.length > 0) {
-  const first = tchars[0];
-  check(first.textContent.length > 0, `第一个目标字符可见：${JSON.stringify(first.textContent)}`);
-  check(first.querySelectorAll('.dot').length + first.querySelectorAll('.dash').length > 0, '目标字符上方有摩尔斯码点划');
+  const center = tchars.find((c) => c.dataset.dist === '0') ?? tchars[Math.floor(tchars.length / 2)];
+  check(!!center && center.textContent.length > 0, `中心字符可见：${JSON.stringify(center?.textContent ?? '')}`);
 }
-
-// 这一课第一条应该是 E 或 T 之类的单字符
 
 // 开始拍发（按 id 点，别靠按钮文案——文案会改，id 不会）
 const armBtn = document.getElementById('arm-toggle');
-check(!!armBtn, '找到「开始拍发」按钮（id=arm-toggle）');
+check(!!armBtn, '找到「开始」按钮（id=arm-toggle）');
 armBtn?.click();
 advance(20);
-check(document.querySelectorAll('.armed-indicator.on').length === 1, '开始拍发后指示灯变绿（.armed-indicator.on）');
+check(document.querySelectorAll('.live-dot.on').length === 1, '开始后指示灯变绿（.live-dot.on）');
 
-// 真的拍一段 CQ 进去（用 window 级键盘事件当直键）
+// 真的拍一段报文进去（用 window 级键盘事件当直键）
 const { ALL_CHAR_TO_PATTERN } = await import(`${corePrefix}morse.js`);
-const { TimingModel } = await import(`${corePrefix}timing-model.js`);
 
-/** 拍一个码字：点 100ms、划 300ms、码元间隔 100ms。返回拍完后的时间。 */
+/** 拍一个码字：点 100ms、划 300ms、码元间隔 100ms、字间隔 300ms。 */
+let sawLiveShape = false;
 function keyChar(ch, dit) {
   const pattern = ALL_CHAR_TO_PATTERN[ch];
   if (!pattern) throw new Error(`没有码形: ${ch}`);
   let first = true;
   for (const sym of pattern) {
-    if (!first) {
-      now += dit; // 码元间隔
-      advance(0);
-    }
+    if (!first) advance(dit); // 码元间隔
     first = false;
     const dur = sym === '.' ? dit : dit * 3;
     document.dispatchWindow('keydown', { code: 'Space', repeat: false });
-    now += dur;
+    advance(Math.round(dur / 2));
+    // 按住的时候，发报条上要有一根正在长的条
+    if (document.querySelectorAll('.sent .sym.live').length > 0) sawLiveShape = true;
+    advance(Math.round(dur / 2));
     document.dispatchWindow('keyup', { code: 'Space', repeat: false });
   }
-  now += dit * 3; // 字符间隔
-  advance(0);
+  advance(dit * 3); // 字间隔
 }
 
-// 目标文本的第一条（通常是单字符或多字符的短条目）
-const targetText = tchars.map((c) => c.querySelector('.ch')?.textContent ?? '').join('');
+// 目标文本的第一条（第 1 课是单字符）
+const targetText = document
+  .querySelectorAll('.cell')
+  .map((c) => c.querySelector('.glyph')?.textContent ?? '')
+  .join('');
 console.log(`[smoke] 本条目标文本: ${JSON.stringify(targetText)}`);
 
 const dit = 100;
@@ -471,22 +494,16 @@ for (const ch of targetText.slice(0, 3)) {
 }
 advance(600); // 触发停顿定稿
 
-const copyText = document.querySelectorAll('.copyline')[0]?.textContent ?? '';
-check(copyText.length > 0, `抄收区有内容：${JSON.stringify(copyText.slice(0, 20))}`);
-const correctCells = document.querySelectorAll('.tchar.correct').length;
-// 注意：这里的 DOM 桩只支持简单选择器，所以用 .dline 而不是 ".diag .dline"
-const diagRows = document.querySelectorAll('.dline').length;
-check(diagRows >= 2, `诊断面板有表头 + 数据行（${diagRows} 行）`);
-const pulseText = document.querySelectorAll('.pulse-dur')[0]?.textContent ?? '';
-check(/\d+ms/.test(pulseText) && /把握/.test(pulseText), `脉冲显示时长与把握：${JSON.stringify(pulseText)}`);
-check(correctCells > 0, `有字符被判对（${correctCells} 个 .tchar.correct）`);
+check(sawLiveShape, '按住时发报条上有一根正在长的点划');
+check(document.querySelectorAll('.sent .quiet').length > 0, '拍完之后发报条收起，只留一行字');
+const copyText = document.querySelectorAll('.message')[0]?.textContent ?? '';
+check(copyText.length > 0, `报文全文有内容：${JSON.stringify(copyText.slice(0, 20))}`);
+const correctCells = document.querySelectorAll('.cell.correct').length;
+check(correctCells > 0, `有字符被判对（${correctCells} 个 .cell.correct）`);
 
-// 指标在动
-const meters = document.querySelectorAll('.meter').map((m) => m.textContent);
-check(
-  meters.some((m) => /\d/.test(m)),
-  `指标有数值：${JSON.stringify(meters.slice(0, 4))}`,
-);
+// 中心字符的透镜尺寸：字级最大、两侧递减（用 dataset.dist 断言，DOM 桩读不到 computed style）
+const dists = document.querySelectorAll('.cell').map((c) => c.dataset.dist);
+check(dists.includes('0'), `中心字符带 dist=0 标记：${JSON.stringify(dists)}`);
 
 // 结算
 const settleBtn = document.querySelectorAll('button').find((b) => b.textContent.trim() === '成绩');

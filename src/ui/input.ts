@@ -4,18 +4,17 @@
  * 硬件事实：鼠标类 HID 设备最小上报间隔是 8ms（USB 全速轮询）或 1ms（高速），
  * 再经过系统与浏览器处理，一次按键的时长误差大约 ±8~16ms。所以：
  *  - 在事件回调里立刻用 performance.now() 取时间戳；
- *  - 真实拍发的“点”本来就可能只有 40~80ms，绝不能按固定毫秒数一刀切；
+ *  - 真实拍发的“点”本来就可能只有 30~80ms，绝不能按固定毫秒数一刀切；
  *  - 只丢掉“根本不像按键”的极短脉冲（默认 18ms 以下，比任何人的点都短得多）。
  *
  * 曾经踩过的坑（务必保留这段注释）：
- *   早期版本用“最近按键时长的中位数 × 0.3”当抖动阈值。但那个中位数是把“点”和“划”
+ *   早期版本还用“最近按键时长的中位数 × 0.3”当抖动阈值。但那个中位数是把“点”和“划”
  *   混在一起算的 —— 按标准比例（PARIS 计时）大约落在 2.1 倍点长附近，乘 0.3 就是
  *   0.62 倍点长，比用户正常的“点”还长。结果就是点被当成抖动丢掉，而且划发得越多
- *   丢得越狠（中位数被划拉高）。现在改成以**时序模型估出的点长**为基准，
- *   并且只在样本足够多时才启用这个自适应判断。
+ *   丢得越狠（中位数被划拉高）。后来改成以估出的点长为基准，一样会丢点：
+ *   丢一个点就是丢一个码元，判读必然出错。现在只保留绝对下限，
+ *   剩下的事交给判定引擎 —— 它本来就是按你自己的长短去读的。
  */
-
-import { median } from '../core/util.ts';
 
 export interface KeyEdge {
   /** 按下时刻（performance.now()）。 */
@@ -26,7 +25,7 @@ export interface KeyEdge {
   duration: number;
   source: 'mouse' | 'keyboard' | 'touch';
   button: number;
-  /** 是否被判定为误触（不计入解码）。 */
+  /** 是否被判定为误触（不计入判定）。 */
   ignored: boolean;
   /** 被判为误触的原因。 */
   ignoreReason?: string;
@@ -35,11 +34,6 @@ export interface KeyEdge {
 export interface KeyInputOptions {
   /** 绝对下限（ms）：短于它的按下直接丢掉。默认 18ms。 */
   debounceMs?: number;
-  /**
-   * 自适应误触判断：低于「点长 × 0.3」的按下视为抖动。
-   * 需要一个能给出当前点长估计的函数；没有它就不做这个判断。
-   */
-  baselineMs?: () => number;
   allowMouseLeft?: boolean;
   allowRightButton?: boolean;
   allowKeyboard?: boolean;
@@ -56,15 +50,8 @@ const DEFAULT_KEYS = ['Space', 'KeyJ', 'KeyK', 'KeyF', 'KeyD', 'NumpadEnter', 'E
 
 /** 绝对下限：比任何人的“点”都短，只用来挡电路/驱动的瞬时脉冲。 */
 const DEFAULT_FLOOR_MS = 18;
-/** 自适应抖动判断的倍率（相对点长）。 */
-const CHATTER_RATIO = 0.3;
-/** 至少要有多少次按键，才敢用自适应判断。 */
-const MIN_SAMPLES_FOR_ADAPTIVE = 8;
 
-type ResolvedOptions = Required<
-  Omit<KeyInputOptions, 'onDown' | 'onUp' | 'onIgnored' | 'baselineMs' | 'isLive'>
-> &
-  KeyInputOptions;
+type ResolvedOptions = Required<Omit<KeyInputOptions, 'onDown' | 'onUp' | 'onIgnored' | 'isLive'>> & KeyInputOptions;
 
 export class KeyInput {
   private el: HTMLElement;
@@ -73,7 +60,6 @@ export class KeyInput {
   private source: KeyEdge['source'] = 'mouse';
   private button = 0;
   private live = false;
-  private durations: number[] = [];
   private disposers: Array<() => void> = [];
 
   constructor(el: HTMLElement, opts: KeyInputOptions = {}) {
@@ -84,7 +70,6 @@ export class KeyInput {
       allowRightButton: opts.allowRightButton ?? true,
       allowKeyboard: opts.allowKeyboard ?? true,
       keys: opts.keys ?? DEFAULT_KEYS,
-      baselineMs: opts.baselineMs,
       isLive: opts.isLive,
       onDown: opts.onDown,
       onUp: opts.onUp,
@@ -108,15 +93,6 @@ export class KeyInput {
 
   get isLive(): boolean {
     return this.live;
-  }
-
-  /** 最近这些按键的中位数时长（仅用于界面显示，不参与过滤）。 */
-  get typicalDuration(): number {
-    return this.durations.length >= 3 ? median(this.durations) : 0;
-  }
-
-  get recentDurations(): readonly number[] {
-    return this.durations;
   }
 
   private attach(): void {
@@ -200,10 +176,6 @@ export class KeyInput {
     const edge = this.makeEdge(up);
     this.downAt = null;
     if (!edge) return;
-    if (this.live && !edge.ignored) {
-      this.durations.push(edge.duration);
-      if (this.durations.length > 60) this.durations.splice(0, this.durations.length - 60);
-    }
     if (this.live) this.opts.onUp?.(edge);
     else this.opts.onIgnored?.(edge);
   }
@@ -230,18 +202,10 @@ export class KeyInput {
   /** 判断这一次按下是不是“根本不像按键”。返回原因或 null（原因里不带时长，由界面补）。 */
   private filterReason(duration: number): string | null {
     if (duration <= 0) return '时长为零';
-    // 1) 绝对下限：挡住电路/驱动的瞬时脉冲（比任何人的点都短得多）
+    // 绝对下限：挡住电路/驱动的瞬时脉冲（比任何人的点都短得多）。
+    // 只此一条：丢一个点就是丢一个码元，判定必然出错，宁可把可疑的一下交给引擎。
     if (this.opts.debounceMs > 0 && duration < this.opts.debounceMs) {
       return `短于 ${this.opts.debounceMs}ms 的下限`;
-    }
-    // 2) 自适应：明显短于“点”的按键，通常是按键抖动或误碰。
-    //    基准取自时序模型估出的点长，而不是“点划混在一起的中位数”。
-    const baseline = this.opts.baselineMs?.() ?? 0;
-    if (baseline > 0 && this.durations.length >= MIN_SAMPLES_FOR_ADAPTIVE) {
-      const floor = baseline * CHATTER_RATIO;
-      if (duration < floor) {
-        return `明显短于点长（约 ${Math.round(baseline)}ms）`;
-      }
     }
     return null;
   }

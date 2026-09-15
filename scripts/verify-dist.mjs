@@ -23,12 +23,12 @@ const REQUIRED = [
   'ui/practice-view.js',
   'ui/input.js',
   'ui/dom.js',
-  'core/decoder.js',
-  'core/timing-model.js',
-  'core/session.js',
-  'core/alignment.js',
+  'ui/settings-view.js',
+  'core/practice.js',
   'core/morse.js',
   'core/lessons.js',
+  'core/audio.js',
+  'core/settings.js',
 ];
 
 const problems = [];

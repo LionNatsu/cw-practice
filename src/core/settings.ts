@@ -3,55 +3,34 @@
 export interface AppSettings {
   /** 你的呼号，用于课程里的 CQ / DE 报文。 */
   callsign: string;
-  /** 初始/参考速度 WPM。 */
+  /** 起始速度 WPM，只作为先验；实际速度跟着你的手走。 */
   wpm: number;
-  /** 是否锁定速度（锁定后模型不跟着你漂移，只统计节奏）。 */
-  speedLocked: boolean;
   /** 侧音频率 Hz。 */
   toneHz: number;
   /** 侧音音量 0..1。 */
   volume: number;
-  /** 是否开启侧音。 */
-  sidetone: boolean;
   /** 是否允许用鼠标左键当直键（没插硬件时也能练）。 */
   allowMouseLeft: boolean;
   /** 是否允许右键。 */
   allowRightButton: boolean;
   /** 是否允许键盘（空格 / J / K 键）。 */
   allowKeyboard: boolean;
-  /** 新手宽容度 0..1，越大越宽容（影响“疑似错字”的门槛）。 */
-  tolerance: number;
-  /** 是否随机顺序练习本课条目。 */
-  shuffle: boolean;
-  /** 停顿判定，单位数（默认 3.5）。 */
-  pauseUnits: number;
   /** 上次练习的课程 id。 */
   lastLessonId: string;
   /** 上次练习的条目下标。 */
   lastItemIndex: number;
-  /** 是否显示诊断面板。 */
-  showDiagnostics: boolean;
-  /** 灵敏度：低于该毫秒数的按下被视为抖动/误触而不计入（默认 0 = 不过滤）。 */
-  debounceMs: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   callsign: 'BG1ABC',
   wpm: 12,
-  speedLocked: false,
   toneHz: 700,
   volume: 0.35,
-  sidetone: true,
   allowMouseLeft: true,
   allowRightButton: true,
   allowKeyboard: true,
-  tolerance: 0.5,
-  shuffle: false,
-  pauseUnits: 3.5,
   lastLessonId: 'l1-rhythm',
   lastItemIndex: 0,
-  showDiagnostics: false,
-  debounceMs: 0,
 };
 
 const KEY = 'cw-practice/settings/v1';

@@ -1,163 +1,112 @@
 /**
  * 练习页。
  *
- * 从上到下依次是：
- *  1) 手键区（鼠标也能当手键；不拍发时按键不进练习，免得误点乱发）
- *  2) 这一条的中文意思和小提示
- *  3) 要发的字：每个字上面画着它该怎么发，发对了变绿、发错了变红
- *  4) 你发出来的内容：已经认出来的用实心字，还没定的用斜体
- *  5) 当前状态：手速、正确率、节奏、点长划长、本次判定把握
- *  6) 按键记录：每一下按了多久、被当成点还是划、跟上一下隔了多久
+ * 画面只有一个重心：中间那个字，像被凸透镜放大。
+ *   码形提示      当前字该发成什么
+ *   字符带        目标报文，中心最清楚，两侧递减
+ *   发报条        你已经发出的点划，按下去的时候还在长
+ * 拍错时这条反馈原地变成“对方听到的是什么”，等重拍，不跳到下一个字。
  */
 
 import type { App } from '../App.ts';
-import { mergeScore, masteredChars } from '../core/settings.ts';
-import type { PracticeSession, SessionSnapshot } from '../core/session.ts';
+import type { PracticeEngine, PracticeState } from '../core/practice.ts';
+import { mergeScore } from '../core/settings.ts';
+import type { SessionScore } from '../core/types.ts';
 import type { KeyEdge } from './input.ts';
 import { KeyInput } from './input.ts';
-import { clear, fmtMs, h, morseBlocks, toast } from './dom.ts';
+import { clear, fmtMs, h, toast } from './dom.ts';
 
-const THROTTLE_MS = 60;
+/** 透镜范围：中心两侧各显示几个字。 */
+const WINDOW = 7;
 
 export class PracticeView {
   private app: App;
-  private session: PracticeSession;
+  private engine: PracticeEngine;
   private input: KeyInput | null = null;
-  private lastRender = 0;
-  private pendingSnapshot: SessionSnapshot | null = null;
   private raf = 0;
-
-  private keypadEl!: HTMLElement;
-  private glossEl!: HTMLElement;
-  private targetEl!: HTMLElement;
-  private copyEl!: HTMLElement;
-  private candEl!: HTMLElement;
-  private pulseEl!: HTMLElement;
-  private diagEl!: HTMLElement;
-  /** 拍发状态指示灯（“正在拍发 / 未开始”）。 */
-  private liveEl!: HTMLElement;
-  private meterEls: Record<string, HTMLElement> = {};
-  /** 是否正在拍发：只有拍发状态下按键才计入练习。 */
-  private live = false;
-  private lastSymbolCount = 0;
   private unsub: Array<() => void> = [];
+
+  private stageEl!: HTMLElement;
+  private ribbonEl!: HTMLElement;
+  private patternEl!: HTMLElement;
+  private sentEl!: HTMLElement;
+  private glossEl!: HTMLElement;
+  private messageEl!: HTMLElement;
+  private armBtn!: HTMLButtonElement;
+  private liveDot!: HTMLElement;
+  private statWpm!: HTMLElement;
+  private statProgress!: HTMLElement;
+
+  private live = false;
   private finished = false;
+  private wrongSeq = 0;
+  private lastFrame = '';
 
   constructor(app: App) {
     this.app = app;
-    this.session = app.startSession(app.itemIndex);
+    this.engine = app.startEngine(app.itemIndex);
+    this.engine.start(performance.now());
   }
 
   render(root: HTMLElement): void {
-    const s = this.session;
     const item = this.app.currentItem;
 
-    this.keypadEl = h(
-      'div',
-      { class: 'keypad', id: 'keypad' },
-      h(
-        'div',
-        { class: 'hint' },
-        h('div', {}, '鼠标停在此区域内。按空格键或点下面的按钮开始。'),
-        h(
-          'div',
-          {},
-          h('kbd', {}, '空格'),
-          ' / ',
-          h('kbd', {}, 'J'),
-          ' / ',
-          h('kbd', {}, 'K'),
-          ' / ',
-          h('kbd', {}, '回车'),
-          '：拍键（鼠标左、右键同样可用）　',
-          h('kbd', {}, 'Esc'),
-          '：开始或停止　',
-          h('kbd', {}, 'R'),
-          '：听示范　',
-          h('kbd', {}, 'N'),
-          '：下一条',
-        ),
-      ),
-    );
+    this.liveDot = h('span', { class: 'live-dot', id: 'live-dot' });
+    this.statWpm = h('b', {}, '--');
+    this.statProgress = h('b', {}, `0/${this.engine.target.length}`);
 
-    this.liveEl = h('span', { class: 'armed-indicator off' }, h('i', { class: 'lamp' }), '未开始');
-
-    const toolbar = h(
+    const bar = h(
       'div',
-      { class: 'row', style: { marginBottom: '10px' } },
-      this.liveEl,
-      // 固定 id：自动化测试（tests/screenshot.mjs）靠它精确点击，
-      // 而不是靠按钮文字——文字会随状态变，靠文字匹配会点错按钮。
-      h('button', { class: 'btn primary', id: 'arm-toggle', onclick: () => this.toggleLive() }, '开始'),
-      h('button', { class: 'btn', onclick: () => this.replayReference() }, '听示范'),
+      { class: 'practice-bar' },
+      this.liveDot,
+      h('span', { class: 'lesson' }, this.app.lesson.title),
+      h('span', { class: 'sep' }, '·'),
+      h('span', {}, `第 ${this.app.itemIndex + 1}/${this.app.items.length} 条`),
       h('div', { class: 'spacer' }),
-      h('button', { class: 'btn', onclick: () => this.restartItem() }, '重拍'),
-      h('button', { class: 'btn', onclick: () => this.nextItem() }, '下一条'),
-      h('button', { class: 'btn ghost', onclick: () => this.finish() }, '成绩'),
+      h('span', {}, '手速 '),
+      this.statWpm,
+      h('span', {}, ' WPM'),
+      h('span', { class: 'sep' }, '·'),
+      h('span', {}, '进度 '),
+      this.statProgress,
     );
 
-    this.glossEl = h('div', { class: 'gloss' });
-    this.targetEl = h('div', { class: 'target' });
-    this.copyEl = h('div', { class: 'copyline' });
-    this.candEl = h('div', { class: 'candidates' });
-    this.pulseEl = h('div', { class: 'pulse-dur' });
+    this.patternEl = h('div', { class: 'pattern-hint', id: 'pattern-hint' });
+    this.ribbonEl = h('div', { class: 'ribbon', id: 'ribbon' });
+    this.sentEl = h('div', { class: 'sent', id: 'sent' });
+    this.stageEl = h('div', { class: 'stage', id: 'stage' }, this.patternEl, this.ribbonEl, this.sentEl);
 
-    const meters = h('div', { class: 'timing-row' });
-    for (const [key, label] of [
-      ['wpm', '手速'],
-      ['accuracy', '正确率'],
-      ['rhythm', '节奏稳定度'],
-      ['dit', '点长'],
-      ['dah', '划长'],
-      ['conf', '本次判定把握'],
-    ] as const) {
-      const v = h('div', { class: 'v' }, '--');
-      this.meterEls[key] = v;
-      meters.appendChild(h('div', { class: 'meter' }, h('div', { class: 'k' }, label), v));
-    }
+    this.glossEl = h('div', { class: 'gloss' }, item.gloss ?? item.text);
+    this.messageEl = h('div', { class: 'message', id: 'message' });
+    const under = h('div', { class: 'under-stage' }, this.glossEl, this.messageEl);
 
-    this.diagEl = h('div', { class: 'diag' });
+    this.armBtn = h(
+      'button',
+      { class: 'btn primary', id: 'arm-toggle', onclick: () => this.toggleLive() },
+      '开始',
+    ) as HTMLButtonElement;
 
-    const head = h(
+    const foot = h(
       'div',
-      { class: 'status-strip' },
-      h('span', { class: 'pill' }, `${this.app.lesson.title}`),
-      h('span', { class: 'pill' }, `第 ${this.app.itemIndex + 1} / ${this.app.items.length} 条`),
-      h('span', { class: 'pill' }, `按 ${this.app.settings.wpm} WPM 起算`),
-      h('span', { class: 'pill' }, `呼号 ${this.app.settings.callsign}`),
+      { class: 'practice-foot' },
+      this.armBtn,
+      h('button', { class: 'btn', id: 'replay', onclick: () => void this.replayReference() }, '重听'),
+      h('button', { class: 'btn', id: 'restart', onclick: () => this.restartItem() }, '重来'),
+      h('button', { class: 'btn ghost', id: 'next-item', onclick: () => this.nextItem() }, '下一条'),
+      h('button', { class: 'btn ghost', id: 'finish', onclick: () => this.finish() }, '成绩'),
     );
 
-    root.appendChild(head);
-    root.appendChild(this.keypadEl);
-    root.appendChild(toolbar);
-    root.appendChild(this.glossEl);
-    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '目标'), this.targetEl));
-    root.appendChild(
-      h(
-        'div',
-        { class: 'card' },
-        h('h2', {}, '识别结果'),
-        this.copyEl,
-        this.candEl,
-        h('div', { class: 'row', style: { marginTop: '10px' } }, this.pulseEl),
-      ),
-    );
-    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '指标'), meters));
-    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '按键记录'), this.diagEl));
+    root.appendChild(h('div', { class: 'practice' }, bar, this.stageEl, under, foot));
 
-    this.syncGloss(item);
     this.attachInput();
-    this.unsub.push(s.onUpdate((snap) => this.queueRender(snap)));
-    this.renderSnapshot(s.snapshot());
+    this.renderState(this.engine.state, true);
 
-    // rAF 驱动“停顿定稿”：没有新按键超过阈值就认为当前字符发完了。
+    // 时钟：判定只在停顿发生时做，所以每帧问一次引擎
     const loop = () => {
       this.raf = requestAnimationFrame(loop);
-      this.session.tick();
-      if (this.pendingSnapshot) {
-        const now = performance.now();
-        if (now - this.lastRender >= THROTTLE_MS) this.renderSnapshot(this.pendingSnapshot);
-      }
+      const now = performance.now();
+      this.engine.tick(now);
+      this.renderState(this.engine.state, false);
     };
     this.raf = requestAnimationFrame(loop);
 
@@ -167,8 +116,8 @@ export class PracticeView {
           this.toggleLive();
           return true;
         }
-        if (ev.code === 'KeyR' && !this.live) {
-          this.replayReference();
+        if (ev.code === 'KeyR') {
+          void this.replayReference();
           return true;
         }
         if (ev.code === 'KeyN') {
@@ -185,20 +134,15 @@ export class PracticeView {
     this.input?.dispose();
     for (const u of this.unsub) u();
     this.unsub = [];
-    this.session.dispose();
     this.app.audio.silence();
     this.app.audio.stopPlayback();
   }
 
-  // ---------- 交互 ----------
+  // ---------- 输入 ----------
 
   private attachInput(): void {
-    this.input = new KeyInput(this.keypadEl, {
-      // 只挡“根本不像按键”的极短脉冲；正常拍发（哪怕点只有 40ms）一律放行。
-      // 自适应抖动判断用「时序模型估出的点长」当基准，
-      // 绝不能用“点划混在一起的中位数”——那会比正常的点还长，会把点全丢掉。
+    this.input = new KeyInput(this.stageEl, {
       debounceMs: 18,
-      baselineMs: () => (this.session.model.stats.nDit >= 8 ? this.session.model.unitMs : 0),
       allowMouseLeft: this.app.settings.allowMouseLeft,
       allowRightButton: this.app.settings.allowRightButton,
       allowKeyboard: this.app.settings.allowKeyboard,
@@ -206,356 +150,235 @@ export class PracticeView {
       onDown: (down) => {
         if (!this.live) return;
         this.app.audio.keyDown();
-        this.keypadEl.classList.add('keying');
-        this.pulseEl.textContent = '…';
-        this.pulseEl.className = 'pulse-dur';
-        void down;
+        this.stageEl.classList.add('keying');
+        this.engine.keyDown(down);
       },
       onUp: (edge) => this.handleEdge(edge),
       onIgnored: (edge) => {
-        if (edge.ignoreReason) this.addDiagLine(edge, edge.ignoreReason);
+        this.engine.keyUp(edge.up);
+        this.stageEl.classList.remove('keying');
+        if (edge.ignoreReason) toast(`已忽略 ${Math.round(edge.duration)}ms：${edge.ignoreReason}`, 'warn');
       },
     });
   }
 
   private handleEdge(edge: KeyEdge): void {
     this.app.audio.keyUp();
-    this.keypadEl.classList.remove('keying');
+    this.stageEl.classList.remove('keying');
     if (!this.live) return;
     if (edge.ignored) {
-      this.addDiagLine(edge, edge.ignoreReason ?? '已忽略');
+      toast(`已忽略 ${Math.round(edge.duration)}ms：${edge.ignoreReason ?? ''}`, 'warn');
       return;
     }
-    this.session.submitPress(edge.down, edge.up);
-    this.renderPulseFromSession();
+    this.engine.press(edge.down, edge.up);
   }
 
   private toggleLive(): void {
     this.live = !this.live;
     this.input?.setLive(this.live);
-    this.liveEl.className = `armed-indicator ${this.live ? 'on' : 'off'}`;
-    clear(this.liveEl);
-    this.liveEl.appendChild(h('i', { class: 'lamp' }));
-    this.liveEl.appendChild(document.createTextNode(this.live ? '正在拍发' : '未开始'));
-    this.keypadEl.classList.toggle('armed', this.live);
-    const btn = this.keypadEl.parentElement?.querySelector<HTMLButtonElement>('button.primary');
-    if (btn) {
-      btn.textContent = this.live ? '停止拍发' : '开始拍发';
-      // 把焦点从按钮上摘掉：空格是按钮的默认激活键，焦点留在按钮上的话，
-      // 拍发时按空格会顺手把按钮“点一下”，很容易把拍发状态弄乱。
-      btn.blur();
-    }
+    this.liveDot.classList.toggle('on', this.live);
+    this.stageEl.classList.toggle('live', this.live);
+    this.armBtn.textContent = this.live ? '停止' : '开始';
+    this.armBtn.blur();
     if (this.live) {
       void this.app.audio.resume();
-      this.session.setPaused(false);
-      toast('已开始，可随时按 Esc 停止', 'good', 1800);
     } else {
       this.app.audio.silence();
+      this.engine.retry();
     }
+    this.renderState(this.engine.state, true);
   }
 
   private restartItem(): void {
-    const wasLive = this.live;
-    this.session.dispose();
-    this.session = this.app.startSession(this.app.itemIndex);
-    this.session.onUpdate((snap) => this.queueRender(snap));
-    this.lastSymbolCount = 0;
+    this.engine = this.app.startEngine(this.app.itemIndex);
+    this.engine.start(performance.now());
     this.finished = false;
-    clear(this.diagEl);
-    if (wasLive) {
-      this.live = false;
-      this.toggleLive();
-    }
-    this.renderSnapshot(this.session.snapshot());
+    this.wrongSeq = 0;
+    this.lastFrame = '';
+    this.glossEl.textContent = this.app.currentItem.gloss ?? this.app.currentItem.text;
+    this.renderState(this.engine.state, true);
   }
 
   private nextItem(): void {
-    const items = this.app.items;
-    const next = (this.app.itemIndex + 1) % items.length;
-    this.app.saveSettings({ lastItemIndex: next });
+    const next = (this.app.itemIndex + 1) % this.app.items.length;
     this.app.itemIndex = next;
-    this.session.dispose();
-    this.session = this.app.startSession(next);
-    this.session.onUpdate((snap) => this.queueRender(snap));
-    this.lastSymbolCount = 0;
-    this.finished = false;
-    clear(this.diagEl);
-    this.syncGloss(this.app.currentItem);
-    if (this.live) {
-      this.live = false;
-      this.toggleLive();
-    }
-    this.renderSnapshot(this.session.snapshot());
-    toast(`下一条：${this.app.currentItem.text}`, 'info', 1600);
+    this.app.saveSettings({ lastItemIndex: next });
+    this.restartItem();
   }
 
   private async replayReference(): Promise<void> {
-    const text = this.app.currentItem.text;
-    toast(`示范：${text}`, 'info', 1500);
-    await this.app.audio.playText(text, this.app.settings.wpm);
+    await this.app.audio.playText(this.app.currentItem.text, this.app.settings.wpm);
   }
 
   private finish(): void {
     if (this.finished) return;
     this.finished = true;
-    this.session.flushPause();
-    const score = this.session.finalize();
+    this.engine.retry();
+    const score = this.engine.finalize(performance.now());
+    // 统计里拍错过一次就算错过：这个字你最终发对了，但也发错过
     const perChar = score.chars
       .filter((c) => c.target)
-      .map((c) => ({ ch: c.target!, correct: c.verdict === 'correct' }));
+      .map((c) => ({ ch: c.target!, correct: c.verdict === 'correct' && c.missed === 0 }));
     this.app.saveProgress(
       mergeScore(this.app.progress, this.app.lesson.id, score.accuracy, score.elapsed, score.pressCount, perChar),
     );
-    const post = this.session.postScore();
-    showResult(this.app, score, post);
+    showResult(this.app, score);
   }
 
   // ---------- 渲染 ----------
 
-  private queueRender(snap: SessionSnapshot): void {
-    this.pendingSnapshot = snap;
-    const now = performance.now();
-    if (now - this.lastRender >= THROTTLE_MS) this.renderSnapshot(snap);
-  }
+  private renderState(st: PracticeState, force: boolean): void {
+    // 一帧里大多数东西没变，用签名挡掉多余的重排
+    const sig = [
+      st.cursor,
+      st.attempt.length,
+      st.holding ?? '-',
+      st.holding === null ? 0 : Math.round(st.holdingMs / 8),
+      st.confused?.seq ?? 0,
+      st.finished ? 1 : 0,
+      this.live ? 1 : 0,
+    ].join('|');
+    if (!force && sig === this.lastFrame) return;
+    this.lastFrame = sig;
 
-  private renderSnapshot(snap: SessionSnapshot): void {
-    this.pendingSnapshot = null;
-    this.lastRender = performance.now();
-    this.renderTarget(snap);
-    this.renderCopy(snap);
-    this.renderMeters(snap);
-    this.appendNewDiagnostics(snap);
-  }
+    this.renderPattern(st);
+    this.renderRibbon(st);
+    this.renderSent(st);
+    this.renderMessage(st);
+    this.statWpm.textContent = st.wpm.toFixed(0);
+    this.statProgress.textContent = `${st.cursor}/${st.target.length}`;
 
-  private syncGloss(item: { text: string; gloss?: string; note?: string }): void {
-    clear(this.glossEl);
-    this.glossEl.appendChild(document.createTextNode(item.gloss ?? item.text));
-    if (item.note) this.glossEl.appendChild(h('span', { class: 'note' }, `※ ${item.note}`));
-  }
-
-  private renderTarget(snap: SessionSnapshot): void {
-    clear(this.targetEl);
-    const mastered = masteredChars(this.app.progress);
-    // 目标下标 → 实际发出的字符。
-    // 注意：还没落账（id === null）的字符在这里画成“待定”，不判对错 ——
-    // 它随时可能被后面的按键改写，过早判错会让新手以为自己发错了。
-    const actualByTarget = new Map<number, { actual: string | null; verdict: string; settled: boolean }>();
-    let ti = 0;
-    for (const s of snap.scores) {
-      if (s.verdict === 'extra') {
-        actualByTarget.set(ti, { actual: s.actual, verdict: 'extra', settled: s.id !== null });
-        continue;
-      }
-      actualByTarget.set(ti, {
-        actual: s.actual,
-        verdict: s.verdict,
-        settled: s.id !== null || s.verdict === 'missing',
-      });
-      ti++;
-    }
-    for (let i = 0; i < snap.target.length; i++) {
-      const t = snap.target[i]!;
-      const info = actualByTarget.get(i);
-      const cls = ['tchar'];
-      if (info && info.settled && info.verdict === 'correct') cls.push('correct', 'done');
-      else if (info && info.settled && info.verdict === 'wrong') cls.push('wrong', 'done');
-      else if (info && info.settled && info.verdict === 'extra') cls.push('wrong');
-      else if (info && info.actual !== null) cls.push('pending');
-      if (i === snap.cursor) cls.push('current');
-      if (!t.isNew && mastered.has(t.ch)) cls.push('known');
-      const cell = h(
-        'div',
-        { class: cls.join(' '), dataset: { idx: String(i) } },
-        h('div', { class: 'ch' }, displayChar(t.ch)),
-        h('div', { class: 'blocks' }, morseBlocks(t.pattern)),
-      );
-      if (info && info.settled && info.verdict === 'wrong') {
-        cell.appendChild(h('span', { class: 'badge' }, `发成 ${displayChar(info.actual ?? '?')}`));
-      } else if (info && !info.settled && info.actual !== null) {
-        cell.appendChild(h('span', { class: 'badge' }, '待定'));
-      } else if (i === snap.cursor) {
-        cell.appendChild(h('span', { class: 'badge' }, '当前'));
-      }
-      this.targetEl.appendChild(cell);
+    // 拍错：红灯闪一下 + 低音提示，只响一次
+    if (st.confused && st.confused.seq !== this.wrongSeq) {
+      this.wrongSeq = st.confused.seq;
+      void this.app.audio.playBump();
+      this.liveDot.classList.add('bad');
+      window.setTimeout(() => this.liveDot.classList.remove('bad'), 400);
     }
   }
 
-  private renderCopy(snap: SessionSnapshot): void {
-    clear(this.copyEl);
-    // 已落账的字符按下标画（带对错颜色）；id === null 的还没落账，单独用斜体画在后面。
-    for (const s of snap.scores) {
-      if (s.verdict === 'missing' || s.id === null) continue;
-      const cls = s.verdict === 'correct' ? 'correct' : s.verdict === 'wrong' ? 'wrong' : 'extra';
-      this.copyEl.appendChild(h('span', { class: `c ${cls}` }, displayChar(s.actual ?? '?')));
-    }
-    for (const p of snap.pending) {
-      this.copyEl.appendChild(h('span', { class: 'c pending' }, displayChar(p.text)));
-    }
-    this.copyEl.appendChild(h('span', { class: 'caret' }));
-
-    clear(this.candEl);
-    if (snap.pending.length > 0) {
-      this.candEl.appendChild(document.createTextNode('待定：'));
-      this.candEl.appendChild(h('b', {}, snap.pending.map((p) => displayChar(p.text)).join('')));
-      if (snap.summary.wrong + snap.summary.missing > 0) {
-        this.candEl.appendChild(
-          h('span', { class: 'dim' }, `　对 ${snap.summary.correct}　错 ${snap.summary.wrong}　漏 ${snap.summary.missing}`),
-        );
-      }
-    } else if (snap.pending.length === 0 && snap.committed.length > 0 && snap.summary.accuracy === 1) {
-      this.candEl.appendChild(h('span', { class: 'good' }, '全部正确。'));
-    } else if (snap.revision) {
-      this.candEl.appendChild(
-        h(
-          'span',
-          {},
-          `已修正：${displayChar(snap.revision.from)} → ${displayChar(snap.revision.to)}`,
-        ),
-      );
+  /** 当前字该发成什么，直接画成点划的形状。 */
+  private renderPattern(st: PracticeState): void {
+    clear(this.patternEl);
+    const want = st.expected;
+    if (!want?.pattern) return;
+    for (const c of want.pattern) {
+      this.patternEl.appendChild(h('span', { class: `sym${c === '-' ? ' dah' : ''}` }));
     }
   }
 
-  private renderMeters(snap: SessionSnapshot): void {
-    const t = snap.timing;
-    setMeter(this.meterEls['wpm']!, `${t.wpm.toFixed(1)}`, 'WPM');
-    setMeter(
-      this.meterEls['accuracy']!,
-      `${(snap.summary.accuracy * 100).toFixed(0)}%`,
-      `对 ${snap.summary.correct}/${snap.target.length}`,
-    );
-    setMeter(this.meterEls['rhythm']!, `${t.rhythmScore}`, '/100');
-    setMeter(this.meterEls['dit']!, fmtMs(t.dit), `样本 ${t.nDit}`);
-    setMeter(this.meterEls['dah']!, fmtMs(t.dah), `样本 ${t.nDah}`);
-    const last = snap.lastSymbol;
-    if (last) {
-      setMeter(this.meterEls['conf']!, `${(last.confidence * 100).toFixed(0)}%`, last.kind === 'dit' ? '点' : '划');
-    } else {
-      setMeter(this.meterEls['conf']!, '--', '');
-    }
-    this.renderPulseFromSession();
-  }
+  /** 透镜式字符带：中心最大，两侧递减。 */
+  private renderRibbon(st: PracticeState): void {
+    const total = st.target.length;
+    clear(this.ribbonEl);
+    if (total === 0) return;
+    // 中心对准“下一个要发的字”；整条发完了就停在最后一个字上
+    const focus = Math.min(st.cursor, total - 1);
+    const from = Math.max(0, focus - WINDOW);
+    const to = Math.min(total - 1, focus + WINDOW);
 
-  private renderPulseFromSession(): void {
-    const symbols = this.session.allSymbols;
-    const last = symbols[symbols.length - 1];
-    if (!last) {
-      this.pulseEl.className = 'pulse-dur';
-      this.pulseEl.textContent = '';
-      return;
-    }
-    this.pulseEl.className = `pulse-dur ${last.kind}`;
-    clear(this.pulseEl);
-    this.pulseEl.appendChild(document.createTextNode(`${Math.round(last.press.duration)}ms`));
-    this.pulseEl.appendChild(
-      h(
-        'small',
-        {},
-        `${last.kind === 'dit' ? '点' : '划'}　把握 ${(last.confidence * 100).toFixed(0)}%　间隔 ${
-          last.gapUnits === null ? '—' : last.gapUnits.toFixed(1) + ' 个单位'
-        }`,
-      ),
-    );
-  }
-
-  private appendNewDiagnostics(snap: SessionSnapshot): void {
-    const symbols = this.session.allSymbols;
-    this.ensureDiagHeader();
-    for (let i = this.lastSymbolCount; i < symbols.length; i++) {
-      const s = symbols[i]!;
-      this.diagEl.appendChild(
+    for (let i = from; i <= to; i++) {
+      const t = st.target[i]!;
+      const dist = Math.min(5, Math.abs(i - focus));
+      const first = i === 0 || st.target[i - 1]!.groupIndex !== t.groupIndex;
+      this.ribbonEl.appendChild(
         h(
           'div',
-          { class: 'dline' },
-          h('span', {}, String(i + 1)),
-          h('span', {}, `${Math.round(s.press.duration)}ms`),
-          h('span', { class: s.kind }, s.kind === 'dit' ? '点' : '划'),
-          h('span', {}, s.gapUnits === null ? '—' : `${s.gapUnits.toFixed(1)} 个单位`),
-          h(
-            'span',
-            { class: 'dim' },
-            `点/划似然 ${pct(s.costDit)} / ${pct(s.costDah)}　把握 ${(s.confidence * 100).toFixed(0)}%`,
-          ),
+          {
+            class: `cell${i < st.cursor ? ' correct' : ''}`,
+            dataset: { dist: String(dist), word: first ? '1' : '0' },
+          },
+          h('div', { class: 'glyph' }, displayChar(t.ch)),
         ),
       );
     }
-    this.lastSymbolCount = symbols.length;
-    void snap;
-    this.diagEl.scrollTop = this.diagEl.scrollHeight;
   }
 
-  /** 补一行“被忽略的按键”。正常拍发不出现这种行。 */
-  private addDiagLine(edge: KeyEdge, reason: string): void {
-    this.ensureDiagHeader();
-    this.diagEl.appendChild(
-      h(
-        'div',
-        { class: 'dline' },
-        h('span', {}, '×'),
-        h('span', {}, `${Math.round(edge.duration)}ms`),
-        h('span', { class: 'warn' }, '忽略'),
-        h('span', {}, '—'),
-        h('span', { class: 'warn' }, reason),
-      ),
-    );
-    this.diagEl.scrollTop = this.diagEl.scrollHeight;
+  /**
+   * 发报条：已经发出的码元。这是每次按键之后最重要的一条反馈，
+   * 所以点划直接画成形状，按着的那一下会当场长出来。
+   */
+  private renderSent(st: PracticeState): void {
+    clear(this.sentEl);
+    const confused = st.confused;
+    if (confused) {
+      this.sentEl.className = 'sent confused';
+      this.sentEl.appendChild(h('span', { class: 'qmark' }, '?'));
+      this.sentEl.appendChild(
+        h(
+          'span',
+          { class: 'said' },
+          confused.recognized ? `对方听到的是 ${confused.heard}` : '对方没听出这是个字',
+          h('span', { class: 'sub' }, '重拍这个字'),
+        ),
+      );
+      return;
+    }
+
+    this.sentEl.className = 'sent';
+    if (!this.live && st.pressCount === 0) {
+      this.sentEl.appendChild(h('span', { class: 'quiet' }, '点「开始」，然后拍发'));
+      return;
+    }
+    for (const k of st.attempt) {
+      this.sentEl.appendChild(h('span', { class: `sym ${k}` }));
+    }
+    if (st.holding !== null) {
+      // 按住的这一下：宽度跟着时长长，越过点划分界就变色
+      const unit = st.unitMs;
+      const w = Math.max(10, Math.min(3.4, st.holdingMs / unit) * 26);
+      this.sentEl.appendChild(
+        h('span', {
+          class: `sym live${st.holding === 'dah' ? ' dah' : ''}`,
+          style: { width: `${w.toFixed(0)}px` },
+        }),
+      );
+    }
+    if (st.attempt.length === 0 && st.holding === null && st.finished) {
+      this.sentEl.appendChild(h('span', { class: 'quiet' }, '发完了'));
+    }
   }
 
-  /** 建表头（只建一次）。被忽略的按键也要能出现在记录里，所以单独抽出来。 */
-  private ensureDiagHeader(): void {
-    if (this.diagEl.childElementCount > 0) return;
-    this.diagEl.appendChild(
-      h(
-        'div',
-        { class: 'dline head' },
-        h('span', {}, '#'),
-        h('span', {}, '时长'),
-        h('span', {}, '判定'),
-        h('span', {}, '间隔'),
-        h('span', {}, '依据'),
-      ),
-    );
+  /** 整条报文：分词显示，颜色跟着进度走。 */
+  private renderMessage(st: PracticeState): void {
+    clear(this.messageEl);
+    for (let i = 0; i < st.target.length; i++) {
+      const t = st.target[i]!;
+      const first = i === 0 || st.target[i - 1]!.groupIndex !== t.groupIndex;
+      if (first && i > 0) this.messageEl.appendChild(h('span', { class: 'gap' }, ' '));
+      const cls = `${i < st.cursor ? 'ok' : i === st.cursor ? 'now' : 'todo'}${t.isNew ? ' new' : ''}`;
+      this.messageEl.appendChild(h('span', { class: cls }, displayChar(t.ch)));
+    }
   }
 }
 
-/** 显示用的字符（把 prosign 之类的特殊键变得可读）。 */
+/** 显示用的字符。 */
 export function displayChar(ch: string): string {
   if (ch === ' ') return '␠';
   return ch;
 }
 
-function setMeter(el: HTMLElement, value: string, sub = ''): void {
-  clear(el);
-  el.appendChild(document.createTextNode(value));
-  if (sub) el.appendChild(h('small', {}, sub));
-}
-
-function pct(cost: number): string {
-  if (!Number.isFinite(cost)) return '∞';
-  return cost.toFixed(2);
-}
-
-/**
- * 成绩单：逐字对错、节奏评分、最容易发错的字，
- * 外加一次“把整段重新解一遍”的结果（把在线时判错的字修回来）。
- */
-function showResult(
-  app: App,
-  score: ReturnType<PracticeSession['finalize']>,
-  post: { text: string; confidence: number; candidates: Array<{ text: string; probability: number }> },
-): void {
+/** 成绩单。 */
+function showResult(app: App, score: SessionScore): void {
   const root = document.getElementById('modal-root');
   if (!root) return;
   const accuracy = score.accuracy;
-  const grade = accuracy >= 0.98 ? '全对' : accuracy >= 0.9 ? '不错' : accuracy >= 0.75 ? '还得练' : '慢慢来';
+  const grade = accuracy >= 0.98 ? '全对' : accuracy >= 0.9 ? '不错' : accuracy >= 0.75 ? '继续' : '再练';
   const gradeClass = accuracy >= 0.9 ? 'good' : accuracy >= 0.75 ? 'warn' : 'bad';
 
   const diff = h('div', { class: 'diff-line' });
   for (const c of score.chars) {
     if (c.verdict === 'correct') diff.appendChild(h('span', { class: 'ok' }, displayChar(c.actual ?? '')));
-    else if (c.verdict === 'wrong') diff.appendChild(h('span', { class: 'err' }, displayChar(c.actual ?? '?')));
-    else if (c.verdict === 'missing') diff.appendChild(h('span', { class: 'miss' }, displayChar(c.target ?? '')));
-    else diff.appendChild(h('span', { class: 'ex' }, displayChar(c.actual ?? '?')));
+    else diff.appendChild(h('span', { class: 'miss' }, displayChar(c.target ?? '')));
   }
+
+  const close = () => modal.remove();
+  const retry = () => app.go('practice');
+  const next = () => {
+    app.itemIndex = (app.itemIndex + 1) % app.items.length;
+    app.saveSettings({ lastItemIndex: app.itemIndex });
+    app.go('practice');
+  };
 
   const modal = h(
     'div',
@@ -566,80 +389,29 @@ function showResult(
       h('h2', {}, `${app.lesson.title} · 第 ${app.itemIndex + 1} 条`),
       h(
         'div',
-        { class: 'row' },
-        h('div', { class: `big-score ${gradeClass}` }, `${(accuracy * 100).toFixed(1)}%`),
-        h('div', { class: 'dim' }, grade),
+        { class: 'row', style: { alignItems: 'baseline', gap: '16px' } },
+        h('div', { class: `big-score ${gradeClass}` }, `${(accuracy * 100).toFixed(0)}%`),
+        h('div', { class: `dim ${gradeClass}` }, grade),
       ),
-      h(
-        'div',
-        { class: 'row dim', style: { fontSize: '12px', gap: '16px' } },
-        h('span', {}, `对 ${score.correct}`),
-        h('span', {}, `错 ${score.wrong}`),
-        h('span', {}, `漏 ${score.missing}`),
-        h('span', {}, `多 ${score.extra}`),
-        h('span', {}, `按键 ${score.pressCount}`),
-        h('span', {}, `用时 ${(score.elapsed / 1000).toFixed(1)} 秒`),
-      ),
-      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '逐字对照：绿＝对，红＝错，下划线＝漏，黄＝多'),
       diff,
-      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '节奏'),
       h(
         'div',
-        { class: 'row', style: { gap: '18px', fontSize: '13px' } },
-        h('span', {}, `点长 ${fmtMs(score.timing.dit)}，浮动 ±${(score.timing.cvDit * 100).toFixed(0)}%`),
-        h('span', {}, `划长 ${fmtMs(score.timing.dah)}，浮动 ±${(score.timing.cvDah * 100).toFixed(0)}%`),
-        h('span', {}, `折合 ${score.timing.wpm.toFixed(1)} WPM`),
-        h('span', { class: score.timing.rhythmScore >= 70 ? 'good' : 'warn' }, `节奏分 ${score.timing.rhythmScore}/100`),
+        { class: 'row dim', style: { fontSize: '12px', gap: '16px', fontFamily: 'var(--mono)' } },
+        h('span', {}, `对 ${score.correct}`),
+        h('span', {}, `拍错 ${score.wrong} 次`),
+        h('span', {}, `漏 ${score.missing}`),
+        h('span', {}, `点 ${fmtMs(score.timing.dit)}`),
+        h('span', {}, `划 ${fmtMs(score.timing.dah)}`),
+        h('span', {}, `节奏 ${score.timing.rhythm}`),
       ),
-      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '整段重新解码的结果'),
       h(
         'div',
-        { class: 'row', style: { fontSize: '14px' } },
-        h('span', {}, '识别为'),
-        h('b', { class: 'warn' }, post.text || '（无）'),
-        h('span', { class: 'dim' }, `把握 ${(post.confidence * 100).toFixed(0)}%`),
-        post.candidates.length > 1
-          ? h(
-              'span',
-              { class: 'dim' },
-              `　次优 ${post.candidates[1]!.text}（${(post.candidates[1]!.probability * 100).toFixed(0)}%）`,
-            )
-          : null,
-      ),
-      score.confusion.length
-        ? h(
-            'div',
-            {},
-            h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '易错字'),
-            h(
-              'div',
-              { class: 'row', style: { fontSize: '13px', gap: '14px' } },
-              ...score.confusion
-                .slice(0, 8)
-                .map((c) => h('span', {}, `${c.target} → ${c.actual ?? '（漏）'} ×${c.count}`)),
-            ),
-          )
-        : null,
-      h(
-        'div',
-        { class: 'row', style: { marginTop: '18px' } },
+        { class: 'row', style: { marginTop: '20px' } },
         h('button', { class: 'btn primary', onclick: () => { close(); retry(); } }, '再拍一次'),
         h('button', { class: 'btn', onclick: () => { close(); next(); } }, '下一条'),
         h('button', { class: 'btn ghost', onclick: () => close() }, '关闭'),
       ),
     ),
   );
-
-  const close = () => modal.remove();
-  const retry = () => {
-    app.go('practice');
-  };
-  const next = () => {
-    const idx = (app.itemIndex + 1) % app.items.length;
-    app.itemIndex = idx;
-    app.saveSettings({ lastItemIndex: idx });
-    app.go('practice');
-  };
-
   root.appendChild(modal);
 }

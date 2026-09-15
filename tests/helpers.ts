@@ -1,12 +1,19 @@
 /**
  * 测试辅助：按国际摩尔斯码的标准节奏，把一个码形串“拍”成按键序列。
  *
- * 这是验证解码器的关键工具：我们可以精确控制每一个点/划的长度（以及人为的偏差），
- * 然后检查解码器能不能把你“拍”的内容认出来。
+ * 有了它就能精确控制每一下点/划的长度（以及人为的偏差与抖动），
+ * 再检查引擎能不能把你“拍”的内容认出来。
  */
 
 import { ALL_CHAR_TO_PATTERN } from '../src/core/morse.ts';
-import type { Press } from '../src/core/types.ts';
+import type { PracticeEngine } from '../src/core/practice.ts';
+
+/** 一次按键（物理按下到抬起）。 */
+export interface Press {
+  down: number;
+  up: number;
+  duration: number;
+}
 
 export interface KeyingOptions {
   /** 点长 ms。 */
@@ -95,4 +102,17 @@ export function spanMs(presses: readonly Press[]): number {
   const first = presses[0]!;
   const last = presses[presses.length - 1]!;
   return last.up - first.down;
+}
+
+/**
+ * 把一串按键按真实节奏喂给引擎：每次按下之前先推进时钟，
+ * 让引擎有机会在按键之间的静音里判定。
+ */
+export function feed(engine: PracticeEngine, presses: readonly Press[], tailMs = 2000): void {
+  for (const p of presses) {
+    engine.tick(p.down);
+    engine.press(p.down, p.up);
+  }
+  const last = presses[presses.length - 1];
+  if (last) engine.tick(last.up + tailMs);
 }

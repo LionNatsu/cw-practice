@@ -94,6 +94,34 @@ export class MorseAudio {
   }
 
   /**
+   * 负反馈：拍错一个字时给对方一个“没抄清”的短音。
+   *
+   * 两声下行的低音，和摩尔斯音明显不同（不是点也不是划），
+   * 所以不会跟报文混淆。
+   */
+  async playBump(): Promise<void> {
+    await this.resume();
+    const ctx = this.ctx;
+    if (!ctx || !this.master) return;
+    const t0 = ctx.currentTime + 0.01;
+    for (let i = 0; i < 2; i++) {
+      const at = t0 + i * 0.16;
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      osc.frequency.setValueAtTime(300, at);
+      osc.frequency.exponentialRampToValueAtTime(150, at + 0.12);
+      osc.connect(g).connect(this.master);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.linearRampToValueAtTime(0.5, at + 0.008);
+      g.gain.linearRampToValueAtTime(0.0001, at + 0.13);
+      osc.start(at);
+      osc.stop(at + 0.16);
+    }
+  }
+
+  /**
    * 参考发送一段文本（标准节奏），返回总时长 ms。
    * 播放途中调用 stopPlayback() 可以打断。
    *

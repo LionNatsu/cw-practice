@@ -153,12 +153,8 @@ export class StatsView {
                 this.app.saveSettings({
                   callsign: 'BG1ABC',
                   wpm: 12,
-                  speedLocked: false,
                   toneHz: 700,
                   volume: 0.35,
-                  sidetone: true,
-                  pauseUnits: 3.5,
-                  tolerance: 0.5,
                 });
                 toast('设置已恢复默认', 'warn');
                 this.app.go('settings');

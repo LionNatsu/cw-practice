@@ -4,8 +4,8 @@
 
 import { MorseAudio } from './core/audio.ts';
 import { LESSONS, expandLesson, lessonById, type Lesson } from './core/lessons.ts';
-import { DEFAULT_SETTINGS, loadProgress, loadSettings, saveProgress, saveSettings, type AppSettings, type ProgressState } from './core/settings.ts';
-import { PracticeSession, type SessionConfig } from './core/session.ts';
+import { DEFAULT_SETTINGS, loadProgress, loadSettings, masteredChars, saveProgress, saveSettings, type AppSettings, type ProgressState } from './core/settings.ts';
+import { PracticeEngine } from './core/practice.ts';
 import { unsupportedChars } from './core/morse.ts';
 import { toast } from './ui/dom.ts';
 
@@ -20,7 +20,7 @@ export class App {
   settings: AppSettings;
   progress: ProgressState;
   audio: MorseAudio;
-  session: PracticeSession | null = null;
+  engine: PracticeEngine | null = null;
   lesson: Lesson;
   itemIndex = 0;
   tab: Tab = 'practice';
@@ -76,27 +76,20 @@ export class App {
     return items[Math.min(this.itemIndex, items.length - 1)]!;
   }
 
-  sessionConfig(): Partial<SessionConfig> {
-    return {
-      callsign: this.settings.callsign,
-      wpm: this.settings.wpm,
-      speedLocked: this.settings.speedLocked,
-      pauseUnits: this.settings.pauseUnits,
-    };
-  }
-
-  /** 开始一个条目：构造新的 PracticeSession。 */
-  startSession(itemIndex = this.itemIndex): PracticeSession {
-    this.session?.dispose();
+  /** 开始一个条目：构造新的练习引擎。 */
+  startEngine(itemIndex = this.itemIndex): PracticeEngine {
     this.itemIndex = itemIndex;
     this.saveSettings({ lastLessonId: this.lesson.id, lastItemIndex: itemIndex });
     const item = this.currentItem;
     const bad = unsupportedChars(item.text);
     if (bad.length) toast(`这些字符暂时没有码表：${bad.join(' ')}`, 'warn');
-    const session = new PracticeSession(item, this.sessionConfig());
-    session.start();
-    this.session = session;
-    return session;
+    const engine = new PracticeEngine({
+      text: item.text,
+      wpm: this.settings.wpm,
+      knownChars: masteredChars(this.progress),
+    });
+    this.engine = engine;
+    return engine;
   }
 
   setLesson(id: string, itemIndex = 0): void {

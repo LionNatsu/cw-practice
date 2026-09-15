@@ -24,9 +24,15 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEBUG_PORT = Number(process.env.CW_CDP_PORT ?? 9334);
 const which = process.argv[2] ?? 'dist';
-const AUDIO_MODULE = which === 'src' ? '/src/core/audio.ts' : '/core/audio.js';
 /** 目标地址：默认自己起一个静态服务器托管 dist/，也可以用 CW_URL 指向别处。 */
 let URL_TARGET = process.env.CW_URL ?? '';
+/**
+ * 音频模块的相对路径（相对站点根）。
+ * 部署到 GitHub Pages 的项目子目录时，站点根是 /cw-practice/，
+ * 所以不能写死 “/core/audio.js”，要跟着 URL_TARGET 一起算。
+ */
+const AUDIO_MODULE_REL = which === 'src' ? 'src/core/audio.ts' : 'core/audio.js';
+const audioModuleUrl = () => new URL(AUDIO_MODULE_REL, URL_TARGET).pathname;
 
 /**
  * 起一个只读的静态服务器托管构建产物。
@@ -313,8 +319,9 @@ const check = (ok, label, extra = '') => {
 
 /** 在页面里用离线上下文播放一段文本，返回包络分析结果。 */
 function playScript(text, wpm) {
+  const modUrl = audioModuleUrl();
   return `(async () => {
-    const mod = await import('${AUDIO_MODULE}');
+    const mod = await import('${modUrl}');
     const analyze = ${analyzeSegments.toString()};
     let offline = null;
     window.AudioContext = function () {
@@ -381,7 +388,7 @@ async function main() {
     //    包络函数，结果 100ms 的点被排成 100 秒，听起来就是一整段长音。
     const timeline = await cdp.eval(
       `(async () => {
-        const mod = await import('${AUDIO_MODULE}');
+        const mod = await import('${audioModuleUrl()}');
         const audio = new mod.MorseAudio({ toneHz: 700, volume: 0.35 });
         await audio.resume();
         const msE = await audio.playText('E', 12);

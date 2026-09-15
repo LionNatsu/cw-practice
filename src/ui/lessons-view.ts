@@ -78,6 +78,7 @@ export class LessonsView {
           'div',
           {
             class: `item${i === this.app.itemIndex ? ' active' : ''}`,
+            id: `lesson-item-${i}`,
             onclick: () => {
               this.app.itemIndex = i;
               this.app.saveSettings({ lastItemIndex: i });
