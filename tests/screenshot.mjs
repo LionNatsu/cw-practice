@@ -644,6 +644,8 @@ async function main() {
       glosses: [...document.querySelectorAll('.lyrics .gl')].map((e) => e.textContent),
       prev: !!document.querySelector('.lyrics .line.prev'),
       next: !!document.querySelector('.lyrics .line.next'),
+      gapHint: document.querySelector('.gap-meter .hint')?.innerText.replace(/\\n/g, ' ') ?? '',
+      gapFill: document.querySelector('.gap-meter .fill')?.style.width ?? '',
       focus: document.activeElement ? document.activeElement.tagName : 'none',
     })`);
     console.log(`[screenshot] 长报文状态: ${longState}`);
@@ -657,6 +659,9 @@ async function main() {
       `每个词下面都有直译（${ls.words} 个词 / ${ls.glosses.length} 条）：${JSON.stringify(ls.glosses)}`,
     );
     check(!!ls.next, '下一条邻句也摆出来了（歌词式滚动）');
+    console.log(`[screenshot] 静音条: ${JSON.stringify(ls.gapHint)} 填充 ${ls.gapFill}`);
+    check(/个单位/.test(ls.gapHint), '字与字之间给出静音提示条');
+    check(ls.gapFill !== '' && ls.gapFill !== '0%', `静音条真的在走：${ls.gapFill}`);
 
     // 7b) 全程用手键操作：发 AR（.-.-.）应当换到下一条，不用摸鼠标
     const itemBefore = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);

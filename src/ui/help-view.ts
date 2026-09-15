@@ -38,6 +38,12 @@ export function renderHelp(root: HTMLElement): void {
         ),
         h('p', {}, '短促一按是点，按住约三倍时长是划。'),
         h(
+          'p',
+          {},
+          '字与字之间是靠静音分开的，不是靠发一个符号：码元之间停 1 个单位，字与字停 3 个，',
+          '换词停 7 个。练习时发报条下面有一条静音条，告诉你现在静了几个单位、还差多少。',
+        ),
+        h(
           'div',
           { class: 'row', style: { gap: '24px', fontSize: '13px', color: 'var(--fg-dim)' } },
           h('span', {}, key('Esc'), ' 暂停 / 继续'),

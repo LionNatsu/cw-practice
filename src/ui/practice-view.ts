@@ -16,7 +16,7 @@
  */
 
 import type { App } from '../App.ts';
-import { COMMAND_INFO, type CommandId, type PracticeEngine, type PracticeState } from '../core/practice.ts';
+import { COMMAND_INFO, THRESHOLDS, type CommandId, type PracticeEngine, type PracticeState } from '../core/practice.ts';
 import { mergeScore } from '../core/settings.ts';
 import type { SessionScore } from '../core/types.ts';
 import type { KeyEdge } from './input.ts';
@@ -269,6 +269,7 @@ export class PracticeView {
       st.attempt.length,
       st.holding ?? '-',
       st.holding === null ? 0 : Math.round(st.holdingMs / 8),
+      st.attempt.length === 0 ? Math.round(st.silenceMs / 16) : 0,
       st.confused?.seq ?? 0,
       st.command?.seq ?? 0,
       st.finished ? 1 : 0,
@@ -392,9 +393,43 @@ export class PracticeView {
 
     if (st.finished) {
       this.sentEl.appendChild(h('span', { class: 'quiet' }, '发完了　发 AR 到下一条，或发 SK 结算'));
-    } else if (st.pressCount === 0) {
-      this.sentEl.appendChild(h('span', { class: 'quiet' }, '直接拍'));
+      return;
     }
+    if (st.pressCount === 0) {
+      this.sentEl.appendChild(h('span', { class: 'quiet' }, '直接拍'));
+      return;
+    }
+    // 字与字之间：告诉人还要静多久 —— 字间 3 个单位，换词要静到 7 个
+    this.sentEl.appendChild(this.silenceMeter(st));
+  }
+
+  /**
+   * 静音条：真实拍发就是靠停顿分字分词的，所以把“该静多久”直接画出来。
+   * 换词的时候目标点是 7 个单位，同一个词里是 3 个。
+   */
+  private silenceMeter(st: PracticeState): HTMLElement {
+    const units = st.silenceMs / Math.max(1, st.unitMs);
+    const goal = st.wordBoundary ? THRESHOLDS.wordGapUnits : THRESHOLDS.charGapUnits;
+    const fill = Math.min(1, units / THRESHOLDS.wordGapUnits);
+    const charTick = (THRESHOLDS.charGapUnits / THRESHOLDS.wordGapUnits) * 100;
+    const done = units >= goal;
+    return h(
+      'span',
+      { class: `gap-meter${done ? ' done' : ''}`, id: 'gap-meter' },
+      h(
+        'span',
+        { class: 'track' },
+        h('i', { class: 'fill', style: { width: `${(fill * 100).toFixed(0)}%` } }),
+        h('i', { class: 'tick char', style: { left: `${charTick.toFixed(0)}%` } }),
+        h('i', { class: 'tick word' }),
+      ),
+      h(
+        'span',
+        { class: 'hint' },
+        st.wordBoundary ? '换词：停到 7 个单位' : '字间：停到 3 个单位',
+        h('b', {}, `${units.toFixed(1)}`),
+      ),
+    );
   }
 
   /**
