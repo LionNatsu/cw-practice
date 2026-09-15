@@ -15,16 +15,65 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const URL_TARGET = process.env.CW_URL ?? 'http://127.0.0.1:8123/';
 const DEBUG_PORT = Number(process.env.CW_CDP_PORT ?? 9334);
 const which = process.argv[2] ?? 'dist';
 const AUDIO_MODULE = which === 'src' ? '/src/core/audio.ts' : '/core/audio.js';
+/** 目标地址：默认自己起一个静态服务器托管 dist/，也可以用 CW_URL 指向别处。 */
+let URL_TARGET = process.env.CW_URL ?? '';
+
+/**
+ * 起一个只读的静态服务器托管构建产物。
+ *
+ * 为什么测试要自带服务器：CI 的干净机器上没有现成的服务器，
+ * 之前就是因此导致 Chrome 打开页面失败（chrome-error://chromewebdata），
+ * 整个部署被打断。
+ */
+async function startStaticServer(dir) {
+  const MIME = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+  };
+  const server = http.createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      let rel = decodeURIComponent(url.pathname);
+      if (rel.endsWith('/')) rel += 'index.html';
+      const full = path.join(dir, rel);
+      if (!full.startsWith(dir)) {
+        res.writeHead(403).end('forbidden');
+        return;
+      }
+      const info = await stat(full).catch(() => null);
+      if (!info || !info.isFile()) {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end(`404 ${rel}`);
+        return;
+      }
+      const body = await readFile(full);
+      res.writeHead(200, {
+        'content-type': MIME[path.extname(full).toLowerCase()] ?? 'application/octet-stream',
+        'content-length': body.length,
+        'cache-control': 'no-store',
+      });
+      res.end(body);
+    } catch (e) {
+      res.writeHead(500).end(String(e));
+    }
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  return { server, url: `http://127.0.0.1:${port}/` };
+}
 
 const CHROME = [
   process.env.CW_CHROME,
@@ -291,6 +340,13 @@ function playScript(text, wpm) {
 }
 
 async function main() {
+  let staticServer = null;
+  if (!URL_TARGET) {
+    const served = await startStaticServer(path.join(ROOT, 'dist'));
+    staticServer = served.server;
+    URL_TARGET = served.url;
+    console.log(`[audio] 已启动本地静态服务器：${URL_TARGET}`);
+  }
   const chrome = spawn(
     CHROME,
     [
@@ -378,6 +434,7 @@ async function main() {
     ws.close();
   } finally {
     chrome.kill();
+    staticServer?.close();
   }
   console.log(`\n[audio] 断言 ${pass} 通过 / ${fail} 失败`);
 }
