@@ -38,7 +38,7 @@ export class PracticeView {
   private patternEl!: HTMLElement;
   private sentEl!: HTMLElement;
   private glossEl!: HTMLElement;
-  private messageEl!: HTMLElement;
+  private lyricsEl!: HTMLElement;
   private liveDot!: HTMLElement;
   private statWpm!: HTMLElement;
   private statProgress!: HTMLElement;
@@ -87,9 +87,9 @@ export class PracticeView {
     this.sentEl = h('div', { class: 'sent', id: 'sent' });
     this.stageEl = h('div', { class: 'stage live', id: 'stage' }, this.patternEl, this.ribbonEl, this.sentEl);
 
-    this.glossEl = h('div', { class: 'gloss' }, item.gloss ?? item.text);
-    this.messageEl = h('div', { class: 'message', id: 'message' });
-    const under = h('div', { class: 'under-stage' }, this.glossEl, this.messageEl);
+    this.glossEl = h('div', { class: 'gloss', id: 'gloss' }, item.gloss ?? item.text);
+    this.lyricsEl = h('div', { class: 'lyrics', id: 'lyrics' });
+    const under = h('div', { class: 'under-stage' }, this.lyricsEl, this.glossEl);
 
     const foot = h(
       'div',
@@ -280,7 +280,7 @@ export class PracticeView {
     this.renderPattern(st);
     this.renderRibbon(st);
     this.renderSent(st);
-    this.renderMessage(st);
+    this.renderLyrics(st);
     this.statWpm.textContent = st.wpm.toFixed(0);
     this.statProgress.textContent = `${st.cursor}/${st.target.length}`;
     this.itemEl.textContent = `第 ${this.app.itemIndex + 1}/${this.app.items.length} 条`;
@@ -397,16 +397,50 @@ export class PracticeView {
     }
   }
 
-  /** 整条报文：分词显示，颜色跟着进度走。 */
-  private renderMessage(st: PracticeState): void {
-    clear(this.messageEl);
+  /**
+   * 报文区：像歌词一样一行一行摆。
+   *
+   * 当前这条按词排开，每个词下面写它的直译，一眼看出这句是怎么拼出来的；
+   * 上下各留一条相邻的条目，淡出，用来交代上下文。
+   */
+  private renderLyrics(st: PracticeState): void {
+    clear(this.lyricsEl);
+
+    const items = this.app.items;
+    const prev = items[this.app.itemIndex - 1];
+    const next = items[this.app.itemIndex + 1];
+    if (prev) this.lyricsEl.appendChild(h('div', { class: 'line prev' }, prev.text));
+    this.lyricsEl.appendChild(this.currentLine(st));
+    if (next) this.lyricsEl.appendChild(h('div', { class: 'line next' }, next.text));
+  }
+
+  /** 当前这条：按词分组，词下面是课程里写好的直译，字母颜色跟着进度走。 */
+  private currentLine(st: PracticeState): HTMLElement {
+    const line = h('div', { class: 'line now', id: 'line-now' });
+    const words = this.app.currentItem.words ?? [];
+    let word = h('div', { class: 'word' });
+    let code = h('div', { class: 'code' });
+    let index = 0;
+
+    const flush = () => {
+      if (!code.childElementCount) return;
+      word.appendChild(code);
+      const gloss = words[index] ?? '';
+      if (gloss) word.appendChild(h('div', { class: 'gl' }, gloss));
+      line.appendChild(word);
+      word = h('div', { class: 'word' });
+      code = h('div', { class: 'code' });
+      index++;
+    };
+
     for (let i = 0; i < st.target.length; i++) {
       const t = st.target[i]!;
-      const first = i === 0 || st.target[i - 1]!.groupIndex !== t.groupIndex;
-      if (first && i > 0) this.messageEl.appendChild(h('span', { class: 'gap' }, ' '));
+      if (i > 0 && t.groupIndex !== st.target[i - 1]!.groupIndex) flush();
       const cls = `${i < st.cursor ? 'ok' : i === st.cursor ? 'now' : 'todo'}${t.isNew ? ' new' : ''}`;
-      this.messageEl.appendChild(h('span', { class: cls }, displayChar(t.ch)));
+      code.appendChild(h('span', { class: cls }, displayChar(t.ch)));
     }
+    flush();
+    return line;
   }
 }
 

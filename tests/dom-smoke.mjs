@@ -442,7 +442,8 @@ check(tchars.length > 0, `目标字符渲染出来了（${tchars.length} 个）`
 check(document.querySelectorAll('.stage').length === 1, '手键区渲染出来了');
 check(document.querySelectorAll('.pattern-hint').length === 1, '当前字符的码形提示渲染出来了');
 check(document.querySelectorAll('.sent').length === 1, '发报条（点划反馈）渲染出来了');
-check(document.querySelectorAll('.message').length === 1, '报文全文渲染出来了');
+check(document.querySelectorAll('.lyrics').length === 1, '报文区（歌词式）渲染出来了');
+check(document.querySelectorAll('.lyrics .line.now .word').length > 0, '当前这句按词排开了');
 check(document.querySelectorAll('.practice-foot')[0]?.childElementCount >= 4, '底部动作按钮渲染出来了');
 if (tchars.length > 0) {
   const center = tchars.find((c) => c.dataset.dist === '0') ?? tchars[Math.floor(tchars.length / 2)];
@@ -528,7 +529,7 @@ advance(600); // 触发停顿定稿
 
 check(sawLiveShape, '按住时发报条上有一根正在长的点划');
 check(document.querySelectorAll('.sent .quiet').length > 0, '拍完之后发报条收起，只留一行字');
-const copyText = document.querySelectorAll('.message')[0]?.textContent ?? '';
+const copyText = document.querySelectorAll('.lyrics .line.now')[0]?.textContent ?? '';
 check(copyText.length > 0, `报文全文有内容：${JSON.stringify(copyText.slice(0, 20))}`);
 const correctCells = document.querySelectorAll('.cell.correct').length;
 check(correctCells > 0, `有字符被判对（${correctCells} 个 .cell.correct）`);

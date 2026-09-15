@@ -4,6 +4,7 @@
 
 import { MorseAudio } from './core/audio.ts';
 import { LESSONS, expandLesson, lessonById, type Lesson } from './core/lessons.ts';
+import type { LessonItem } from './core/types.ts';
 import { DEFAULT_SETTINGS, loadProgress, loadSettings, masteredChars, saveProgress, saveSettings, type AppSettings, type ProgressState } from './core/settings.ts';
 import { PracticeEngine } from './core/practice.ts';
 import { unsupportedChars } from './core/morse.ts';
@@ -71,7 +72,7 @@ export class App {
     return expandLesson(this.lesson, this.settings.callsign);
   }
 
-  get currentItem(): { text: string; gloss?: string; note?: string } {
+  get currentItem(): LessonItem {
     const items = this.items;
     return items[Math.min(this.itemIndex, items.length - 1)]!;
   }

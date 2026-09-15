@@ -25,6 +25,11 @@ export interface LessonItem {
   text: string;
   /** 中文含义。 */
   gloss?: string;
+  /**
+   * 逐词直译，与 text 里空格分开的词一一对应（按上下文写，不查表）。
+   * 有几个词就写几条；不想标的词写空串。单字连发这类没有词义的不写。
+   */
+  words?: string[];
   /** 可选备注。 */
   note?: string;
 }

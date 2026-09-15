@@ -485,44 +485,84 @@ label.inline {
 /* 上下文与结果：细，安静，不抢中心 */
 .under-stage {
   text-align: center;
-  min-height: 46px;
-  padding: 0 20px;
+  padding: 0 20px 10px;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
-.under-stage .gloss {
-  color: var(--fg-dim);
-  font-size: 13px;
+/* 报文区：像歌词一样一行一行摆，上下两条淡出 */
+.lyrics {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 26%, #000 74%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 26%, #000 74%, transparent);
 }
 
-.under-stage .message {
+.lyrics .line {
   font-family: var(--mono);
-  font-size: 20px;
-  letter-spacing: 3px;
-  color: var(--fg-dim);
-  margin-top: 8px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 20px;
 }
 
-.under-stage .message .ok {
+/* 相邻条目：给个上下文，不抢焦点 */
+.lyrics .line.prev,
+.lyrics .line.next {
+  font-size: 13px;
+  letter-spacing: 3px;
+  color: var(--fg-faint);
+}
+
+.lyrics .word {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.lyrics .code {
+  font-size: 19px;
+  letter-spacing: 3px;
+  color: var(--fg-faint);
+}
+
+.lyrics .code .ok {
   color: var(--good);
 }
 
-.under-stage .message .now {
+.lyrics .code .now {
   color: var(--fg);
   border-bottom: 2px solid var(--fg);
 }
 
-.under-stage .message .todo {
+.lyrics .code .todo {
   color: var(--fg-faint);
 }
 
-.under-stage .message .new {
+.lyrics .code .new {
   text-decoration: underline dotted var(--fg-faint);
   text-underline-offset: 6px;
 }
 
-.under-stage .message .gap {
-  display: inline-block;
-  width: 0.7em;
+/* 每个词下面的直译 */
+.lyrics .gl {
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--fg-dim);
+}
+
+.under-stage .gloss {
+  margin-top: 12px;
+  color: var(--fg-dim);
+  font-size: 13px;
 }
 
 /* 底部：五个动作，各带过程信号名与它的码形 */

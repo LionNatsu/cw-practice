@@ -640,7 +640,10 @@ async function main() {
       center: document.querySelector(".cell[data-dist='0'] .glyph")?.textContent ?? '',
       copy: document.querySelector('.message')?.innerText.replace(/\\n/g,' ') ?? '',
       pattern: document.querySelector('.pattern-hint')?.innerText ?? '',
-      gap: !!document.querySelector('.message .gap'),
+      words: document.querySelectorAll('.lyrics .line.now .word').length,
+      glosses: [...document.querySelectorAll('.lyrics .gl')].map((e) => e.textContent),
+      prev: !!document.querySelector('.lyrics .line.prev'),
+      next: !!document.querySelector('.lyrics .line.next'),
       focus: document.activeElement ? document.activeElement.tagName : 'none',
     })`);
     console.log(`[screenshot] 长报文状态: ${longState}`);
@@ -648,7 +651,12 @@ async function main() {
     check(ls.correct > 0, `逐字过：拍对的字被认下来（${ls.correct} 个）`);
     check(!!ls.center, '中心位置始终有字符（透镜聚焦）');
     check(ls.center === targetLong[ls.correct], `中心应对准下一个要发的字（认下 ${ls.correct} 个，中心是 ${ls.center}，下一个应是 ${targetLong[ls.correct]}）`);
-    check(ls.gap, '报文里能看出分词断句（词之间有空格）');
+    check(ls.words > 1, `当前这句按词排开（${ls.words} 个词）`);
+    check(
+      ls.glosses.length === ls.words,
+      `每个词下面都有直译（${ls.words} 个词 / ${ls.glosses.length} 条）：${JSON.stringify(ls.glosses)}`,
+    );
+    check(!!ls.next, '下一条邻句也摆出来了（歌词式滚动）');
 
     // 7b) 全程用手键操作：发 AR（.-.-.）应当换到下一条，不用摸鼠标
     const itemBefore = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);

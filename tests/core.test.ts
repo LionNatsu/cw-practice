@@ -12,7 +12,7 @@ import test from 'node:test';
 
 import { ALL_CHAR_TO_PATTERN, PATTERN_TO_CHAR, textDurationMs, unsupportedChars } from '../src/core/morse.ts';
 import { PracticeEngine, readSpeed, settleUnitFor } from '../src/core/practice.ts';
-import { LESSONS, expandLesson } from '../src/core/lessons.ts';
+import { LESSONS, PARTNER_CALLSIGN, expandLesson, resolvePlaceholders } from '../src/core/lessons.ts';
 import { DEFAULT_SETTINGS, EMPTY_PROGRESS, masteredChars, mergeScore, type ProgressState } from '../src/core/settings.ts';
 import { feed, pressText } from './helpers.ts';
 
@@ -64,6 +64,50 @@ test('课程里的呼号占位符会被替换', () => {
   const items = expandLesson(LESSONS[0]!, 'BD7XYZ');
   const text = items.map((i) => i.text).join(' ');
   assert.ok(!text.includes('{CALLSIGN}'), '占位符没有被替换');
+});
+
+test('逐词直译与词一一对应，多词条目必須有直译', () => {
+  let withWords = 0;
+  for (const lesson of LESSONS) {
+    for (const it of lesson.items) {
+      const tokens = it.text.trim().toUpperCase().split(/\s+/).filter(Boolean);
+      if (it.words) {
+        withWords++;
+        assert.equal(
+          it.words.length,
+          tokens.length,
+          `${lesson.id} 的 "${it.text}" 有 ${tokens.length} 个词，却写了 ${it.words.length} 条直译`,
+        );
+        for (const w of it.words) assert.equal(w.trim(), w, `"${it.text}" 的直译不该有多余空白`);
+      } else if (tokens.length > 1) {
+        assert.fail(`${lesson.id} 的多词条目 "${it.text}" 缺逐词直译`);
+      }
+    }
+  }
+  assert.ok(withWords >= 90, `写了直译的条目太少：${withWords}`);
+});
+
+test('呼号都走占位符：自己的来自设置，对方是虚构的', () => {
+  assert.notEqual(PARTNER_CALLSIGN, DEFAULT_SETTINGS.callsign, '对方呼号不能等于默认的自己，否则成自言自语');
+  assert.ok(/^[A-Z]{1,3}\d[A-Z]{1,4}$/.test(PARTNER_CALLSIGN), `对方呼号得像真的：${PARTNER_CALLSIGN}`);
+
+  for (const lesson of LESSONS) {
+    for (const it of lesson.items) {
+      for (const token of it.text.split(/\s+/)) {
+        assert.ok(
+          !/^[A-Z]{1,3}\d[A-Z]{1,4}$/.test(token.replace(/[^A-Z0-9]/gi, '').toUpperCase()),
+          `${lesson.id} 的 "${it.text}" 里写死了呼号 ${token}，应该用 {CALLSIGN} 或 {PARTNER}`,
+        );
+      }
+      // 展开之后不该剩下占位符
+      const expanded = resolvePlaceholders(it.text, 'BG1ABC');
+      assert.ok(!expanded.includes('{'), `占位符没被替换：${it.text}`);
+      assert.ok(
+        !expanded.includes(DEFAULT_SETTINGS.callsign + ' DE ' + DEFAULT_SETTINGS.callsign),
+        `不该拿自己的呼号对自己喊：${it.text}`,
+      );
+    }
+  }
 });
 
 /* ============================ 设置与进度 ============================ */
