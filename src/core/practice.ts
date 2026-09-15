@@ -47,7 +47,7 @@ export const THRESHOLDS = {
   /** 速度估计的滑动窗口。 */
   unitWindow: 24,
   /**
-   * 标准间隔（单位数），只用来画"该停多久"的提示条，不参与判定。
+   * 标准间隔（单位数），只用来画“该停多久”的提示条，不参与判定。
    *
    * 真实拍发里字与字之间靠静音分开：码元内 1 个单位、字间 3 个、词间 7 个。
    * 判定实际发生在 symbolGapMax（2.5）—— 比标准早一点，给手快的人留余量。
@@ -322,7 +322,7 @@ export interface PracticeState {
   holdingMs: number;
   /**
    * 从最后一次抬起到现在静了多久（ms）。正按着或还没按过是 0。
-   * 界面用它画"还要停多久"的提示条：字间隔 3 个单位，词间隔 7 个。
+   * 界面用它画“还要停多久”的提示条：字间隔 3 个单位，词间隔 7 个。
    */
   silenceMs: number;
   /** 下一个字是否换词了 —— 换词就要停到 7 个单位。 */
@@ -449,7 +449,7 @@ export class PracticeEngine {
     this.pressCount++;
     this.attempt.push({ duration, gapBefore });
     this.lastUpAt = up;
-    // 静音计时要跨过"判完这次尝试"继续走，所以单独记一份
+    // 静音计时要跨过“判完这次尝试”继续走，所以单独记一份
     this.lastReleaseAt = up;
     // 又开始拍了，上一次的负反馈收起来
     this.confused = null;
