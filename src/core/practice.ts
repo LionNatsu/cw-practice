@@ -99,7 +99,7 @@ export type CommandId = 'prev' | 'next' | 'retry' | 'replay' | 'score';
  *   <AR> .-.-.     报文结束     → 下一条
  *   <BK> -...-.-   打断/回到前面 → 上一条
  *   <HH> ........  发错了       → 本条重来（8 个点，不是任何字符的码形）
- *   ?    ..--..    请重发       → 重听示范
+ *   ?    ..--..    请对方重发   → 听示范
  *   <SK> ...-.-    结束联络     → 结算成绩
  *
  * 目标字优先：课上正好在练 ? 时，它就是目标字，不是命令。
@@ -117,7 +117,7 @@ export const COMMAND_INFO: Readonly<Record<CommandId, { name: string; pattern: s
   prev: { name: 'BK', pattern: '-...-.-', label: '上一条' },
   next: { name: 'AR', pattern: '.-.-.', label: '下一条' },
   retry: { name: 'HH', pattern: '........', label: '本条重来' },
-  replay: { name: '?', pattern: '..--..', label: '重听示范' },
+  replay: { name: '?', pattern: '..--..', label: '听示范' },
   score: { name: 'SK', pattern: '...-.-', label: '结算成绩' },
 };
 
