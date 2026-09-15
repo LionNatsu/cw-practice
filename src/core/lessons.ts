@@ -24,33 +24,33 @@ export function resolvePlaceholders(text: string, callsign: string): string {
 export const LESSONS: readonly Lesson[] = [
   {
     id: 'l1-rhythm',
-    title: '第 1 课　一个点和一个划（E / T）',
+    title: '第 1 课　点与划（E / T）',
     level: 1,
-    summary: 'E 是一个点，T 是一个划。这一课只练一件事：把它们的长短分清楚。慢不要紧，先分清。',
+    summary: 'E 是一个点，T 是一个划。本课只处理一件事：把两者的长短分开。',
     focus: ['E', 'T'],
     items: [
       { text: 'E', gloss: 'E：一个点', note: '短促，触到即松' },
       { text: 'T', gloss: 'T：一个划，长度是点的三倍', note: '按得久，而不是用力' },
-      { text: 'TE', gloss: 'TE：一个划接一个点' },
-      { text: 'ET', gloss: 'ET：点划顺序相反' },
+      { text: 'TE', gloss: 'TE：划、点' },
+      { text: 'ET', gloss: 'ET：点、划' },
       { text: 'TEE', gloss: 'TEE：划、点、点' },
       { text: 'TEET', gloss: 'TEET：点划混合' },
-      { text: 'EEEE', gloss: 'EEEE：连着四个点，听自己有没有越拍越快' },
-      { text: 'TTTT', gloss: 'TTTT：连着四个划，看长短是不是一样' },
+      { text: 'EEEE', gloss: 'EEEE：连续四个点，检查是否越拍越快' },
+      { text: 'TTTT', gloss: 'TTTT：连续四个划，检查长短是否一致' },
     ],
   },
   {
     id: 'l1-an',
-    title: '第 2 课　照镜子的一对（A / N）',
+    title: '第 2 课　点划顺序（A / N）',
     level: 1,
-    summary: 'A 是“点划”，N 是“划点”，正好相反。这一对最能照出你到底分清点划没有。',
+    summary: 'A 是点划，N 是划点，顺序相反。这两个码可以直接检验点划是否分得开。',
     focus: ['A', 'N'],
     items: [
       { text: 'A', gloss: 'A：点、划' },
       { text: 'N', gloss: 'N：划、点' },
-      { text: 'AN', gloss: 'AN：点划、划点，连着来' },
-      { text: 'NA', gloss: 'NA：点划顺序相反' },
-      { text: 'ANA', gloss: 'ANA：常见于人名 Anna' },
+      { text: 'AN', gloss: 'AN：点划、划点，连续发' },
+      { text: 'NA', gloss: 'NA：划点、点划' },
+      { text: 'ANA', gloss: 'ANA：人名 Anna 的常见拼法' },
       { text: 'NAN', gloss: 'NAN' },
       { text: 'ETAN', gloss: 'ETAN：四个最基础的码连起来' },
       { text: 'TEN', gloss: 'TEN：十', note: '中间的 E 要短，别拖' },
@@ -60,16 +60,16 @@ export const LESSONS: readonly Lesson[] = [
   },
   {
     id: 'l1-imso',
-    title: '第 3 课　点点、划划（I / M / S / O）',
+    title: '第 3 课　同符号连发（I / M / S / O）',
     level: 1,
-    summary: '两点、两划，三点、三划。连着发同一符号，最容易暴露“点越拍越长”的毛病。',
+    summary: '两点、两划、三点、三划。连续发同一符号，最容易看出点是否越拍越长。',
     focus: ['I', 'M', 'S', 'O'],
     items: [
       { text: 'I', gloss: 'I：两个点' },
       { text: 'M', gloss: 'M：两个划' },
       { text: 'S', gloss: 'S：三个点' },
       { text: 'O', gloss: 'O：三个划' },
-      { text: 'SOS', gloss: 'SOS：国际求救信号', note: '其实要连着发成“三个点三个划三个点”，中间不留空' },
+      { text: 'SOS', gloss: 'SOS：国际求救信号', note: '实际要连成“三个点、三个划、三个点”，中间不留空' },
       { text: 'MOM', gloss: 'MOM：妈妈' },
       { text: 'SIS', gloss: 'SIS' },
       { text: 'MISO', gloss: 'MISO' },
@@ -79,9 +79,9 @@ export const LESSONS: readonly Lesson[] = [
   },
   {
     id: 'l2-abbrev-basic',
-    title: '第 4 课　通联里最常用的那些简语',
+    title: '第 4 课　常用简语（一）',
     level: 2,
-    summary: 'CW 通联里一多半的话都是这些两三字母的简语。要整个认下来，别一个字母一个字母拼。',
+    summary: '通联中一多半的内容由这些两三字母的简语构成，需要整体识别，不要逐字母拼接。',
     focus: ['K', 'R', 'D', 'G', 'U', 'H'],
     items: [
       { text: 'DE', gloss: 'DE：我是……（后面跟上自己的呼号）' },
@@ -101,16 +101,16 @@ export const LESSONS: readonly Lesson[] = [
       { text: 'RIG', gloss: 'RIG：设备' },
       { text: 'ANT', gloss: 'ANT：天线' },
       { text: 'PWR', gloss: 'PWR：功率' },
-      { text: 'CQ', gloss: 'CQ：呼叫，看有没有人搭理' },
+      { text: 'CQ', gloss: 'CQ：普遍呼叫，等待任何电台应答' },
       { text: 'DX', gloss: 'DX：远处、远地电台' },
       { text: 'QSL', gloss: 'QSL：确认；也指通联卡片' },
     ],
   },
   {
     id: 'l2-abbrev-pro',
-    title: '第 5 课　再认一批简语',
+    title: '第 5 课　常用简语（二）',
     level: 2,
-    summary: '这批全是 Q 简语和客套话。对方一听就知道你会不会玩。先认清样子，再求快。',
+    summary: '本课为 Q 简语与通联客套话。先认清码形，再求速度。',
     focus: ['L', 'F', 'V', 'W', 'P', 'X', 'Y', 'Z'],
     items: [
       { text: 'TNX', gloss: 'TNX：谢谢' },
@@ -137,9 +137,9 @@ export const LESSONS: readonly Lesson[] = [
   },
   {
     id: 'l3-numbers',
-    title: '第 6 课　数字和信号报告',
+    title: '第 6 课　数字与信号报告',
     level: 3,
-    summary: '数字撑起整篇报文。其中 599 是 CW 里出现最多的一组，一定要发得又快又干净。',
+    summary: '数字是报文的骨架，其中 599 出现频率最高，需要发得干净。',
     focus: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
     items: [
       { text: '5', gloss: '5：五个点' },
@@ -161,9 +161,9 @@ export const LESSONS: readonly Lesson[] = [
   },
   {
     id: 'l3-callsign',
-    title: '第 7 课　呼号和 CQ',
+    title: '第 7 课　呼号与 CQ 呼叫',
     level: 3,
-    summary: '呼号得整个认，不能拼。这一课就练那句 CQ CQ CQ DE <你的呼号> <你的呼号> K。',
+    summary: '呼号必须整体识别。本课练习 CQ CQ CQ DE <呼号> <呼号> K 这一固定格式。',
     focus: ['C', 'Q', 'D', 'E', 'K', 'P'],
     items: [
       { text: '{CALLSIGN}', gloss: '你自己的呼号' },
@@ -182,10 +182,10 @@ export const LESSONS: readonly Lesson[] = [
   },
   {
     id: 'l3-punct',
-    title: '第 8 课　标点和过程信号',
+    title: '第 8 课　标点与过程信号',
     level: 3,
     summary:
-      '有了标点，报文才成句子。过程信号（prosign）是几个字母连着发、中间不留空，要一气呵成。普通键盘上没有这些键，这里约定用四个符号顶替。',
+      '标点让报文成为完整句子。过程信号（prosign）要连着发、中间不留空。普通键盘没有对应按键，本站约定用四个符号代替。',
     focus: ['.', ',', '?', '/', '+', '=', '!', '('],
     items: [
       { text: 'RR.', gloss: '句号：点划点划点划' },
@@ -202,7 +202,7 @@ export const LESSONS: readonly Lesson[] = [
     id: 'l4-qso-short',
     title: '第 9 课　一问一答',
     level: 4,
-    summary: '把学过的全串起来。每一条都是完整的一次发言，发完再看对不对。',
+    summary: '把前面学过内容串起来。每条都是一次完整发送，发完再核对。',
     focus: ['C', 'Q', 'D', 'E', 'K', 'R', 'S', 'T'],
     items: [
       { text: 'CQ CQ DE {CALLSIGN} K', gloss: '我喊：我是 {CALLSIGN}，请讲' },
@@ -219,9 +219,9 @@ export const LESSONS: readonly Lesson[] = [
   },
   {
     id: 'l4-qso-full',
-    title: '第 10 课　完整的一次通联',
+    title: '第 10 课　完整通联',
     level: 4,
-    summary: '从头到尾走一遍真实通联。可以中途停下来，停顿会被当成字与字之间的空档，不会算错。',
+    summary: '完整走一遍真实通联。可以中途停顿，停顿会被判为字间隔，不影响判定。',
     focus: ['C', 'Q', 'D', 'E', 'K', 'R', 'T', 'N'],
     items: [
       {
@@ -252,9 +252,9 @@ export const LESSONS: readonly Lesson[] = [
   },
   {
     id: 'l5-dx',
-    title: '第 11 课　比赛和远征的节奏',
+    title: '第 11 课　比赛与远征节奏',
     level: 5,
-    summary: '又快又省，能省的字全省。这一课要求“一眼认出一整块，手上发得干干净净”。',
+    summary: '高节奏、极简交换，能省的字全省。要求整体识别，手指干净利落。',
     focus: ['5', '9', 'N', 'T', 'U', 'K'],
     items: [
       { text: '{CALLSIGN} 5NN 5NN', gloss: '比赛式的信号报告 599' },

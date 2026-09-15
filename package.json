@@ -15,7 +15,8 @@
     "test:watch": "node --watch --experimental-strip-types tests/core.test.ts",
     "test:smoke": "node scripts/build.mjs && node tests/dom-smoke.mjs dist",
     "serve": "node scripts/serve.mjs dist 8080",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:text": "node scripts/check-punctuation.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

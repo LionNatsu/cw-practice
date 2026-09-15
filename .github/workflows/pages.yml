@@ -29,6 +29,8 @@ jobs:
           node-version: '22'
       - name: 跑核心逻辑测试
         run: node --experimental-strip-types tests/core.test.ts
+      - name: 中文标点检查
+        run: node scripts/check-punctuation.mjs
       - name: 构建静态站点（零依赖）
         run: node scripts/build.mjs
       - name: 冒烟测试（最小 DOM 桩，真跑一遍构建产物）
