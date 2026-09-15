@@ -489,15 +489,15 @@ check(
 );
 
 // 结算
-const settleBtn = document.querySelectorAll('button').find((b) => b.textContent.includes('看看成绩'));
-check(!!settleBtn, '找到「看看成绩」按钮');
+const settleBtn = document.querySelectorAll('button').find((b) => b.textContent.trim() === '成绩');
+check(!!settleBtn, '找到「成绩」按钮');
 settleBtn?.click();
 advance(50);
 const modal = document.querySelectorAll('.modal')[0];
 check(!!modal, '结算弹窗弹出来了');
 if (modal) {
   check(/\d/.test(modal.textContent), `弹窗里有成绩：${JSON.stringify(modal.textContent.slice(0, 60))}`);
-  const closeBtn = modal.querySelectorAll('button').find((b) => b.textContent.includes('关上'));
+  const closeBtn = modal.querySelectorAll('button').find((b) => b.textContent.includes('关闭'));
   closeBtn?.click();
   advance(20);
   check(document.querySelectorAll('.modal').length === 0, '弹窗能关闭');

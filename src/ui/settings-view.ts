@@ -90,7 +90,7 @@ export class SettingsView {
           h(
             'label',
             { class: 'field' },
-            '你的呼号（会用在 CQ、DE 这些呼号里）',
+            '呼号（用于 CQ、DE 等报文）',
             h('input', {
               type: 'text',
               value: s.callsign,
@@ -98,14 +98,14 @@ export class SettingsView {
               oninput: (e: Event) => this.app.saveSettings({ callsign: (e.target as HTMLInputElement).value.toUpperCase() }),
             }),
           ),
-          num('起始速度 WPM', s.wpm, 4, 40, 1, (v) => this.app.saveSettings({ wpm: v }), '12 大约是每个点 100ms'),
-          check('锁定速度', s.speedLocked, (v) => this.app.saveSettings({ speedLocked: v }), '想严格按固定节奏练时打开'),
+          num('起始速度 WPM', s.wpm, 4, 40, 1, (v) => this.app.saveSettings({ wpm: v }), '12 约合每点 100ms'),
+          check('锁定速度', s.speedLocked, (v) => this.app.saveSettings({ speedLocked: v }), '固定节奏练习时启用'),
         ),
         h(
           'p',
           { class: 'dim', style: { fontSize: '12px' } },
-          '这个速度只是个起点：程序会自己摸清你的点有多长，所以手快手慢都不用改它。',
-          '勾上“锁定速度”之后就不再跟着你变，只记录你的节奏稳不稳 —— 想练“稳定到 15 WPM”时用。',
+          '起始速度只影响初始判据，程序随后会自行估计你的点长，手快手慢都不必修改。',
+          '启用「锁定速度」后不再跟随，只统计节奏稳定性。',
         ),
       ),
     );
@@ -120,7 +120,7 @@ export class SettingsView {
           { class: 'row' },
           num('侧音频率 Hz', s.toneHz, 300, 1200, 10, (v) => this.app.saveSettings({ toneHz: v })),
           num('音量 %', Math.round(s.volume * 100), 0, 100, 5, (v) => this.app.saveSettings({ volume: v / 100 })),
-          check('按下时出声（侧音）', s.sidetone, (v) => this.app.saveSettings({ sidetone: v })),
+          check('按键时发出侧音', s.sidetone, (v) => this.app.saveSettings({ sidetone: v })),
           h(
             'button',
             {
@@ -130,7 +130,7 @@ export class SettingsView {
                 await this.app.audio.playText('PARIS', this.app.settings.wpm);
               },
             },
-            '听一下（PARIS）',
+            '试听',
           ),
         ),
       ),
@@ -140,7 +140,7 @@ export class SettingsView {
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, '用什么当手键'),
+        h('h2', {}, '输入方式'),
         h(
           'div',
           { class: 'row' },
@@ -151,15 +151,15 @@ export class SettingsView {
         h(
           'div',
           { class: 'row', style: { marginTop: '10px' } },
-          slider('多久算一个字发完', s.pauseUnits, 2.5, 6, 0.1, (v) => this.app.saveSettings({ pauseUnits: v }), (v) => `${v.toFixed(1)} 个单位`),
-          slider('对新手宽容一点', s.tolerance, 0, 1, 0.05, (v) => this.app.saveSettings({ tolerance: v }), (v) => `${(v * 100).toFixed(0)}%`),
-          check('打乱本课的顺序', s.shuffle, (v) => this.app.saveSettings({ shuffle: v })),
+          slider('字间隔判定', s.pauseUnits, 2.5, 6, 0.1, (v) => this.app.saveSettings({ pauseUnits: v }), (v) => `${v.toFixed(1)} 个单位`),
+          slider('新手宽容度', s.tolerance, 0, 1, 0.05, (v) => this.app.saveSettings({ tolerance: v }), (v) => `${(v * 100).toFixed(0)}%`),
+          check('打乱本课顺序', s.shuffle, (v) => this.app.saveSettings({ shuffle: v })),
         ),
         h(
           'p',
           { class: 'dim', style: { fontSize: '12px' } },
-          '“多久算一个字发完”：两次按键之间静了这么长时间，就认为上一个字发完了（标准是 3 个单位）。',
-          '发得慢的话可以调到 3.0 左右；发得干脆的可以调大一点。',
+          '字间隔判定：两次按键之间静音达到该时长即视为一个字结束，标准值为 3 个单位。',
+          '发得慢可调小，发得干脆可调大。',
         ),
       ),
     );
@@ -173,15 +173,15 @@ export class SettingsView {
       h(
         'div',
         { class: 'hint' },
-        h('div', {}, '在这里连拍几十下，看看程序把你的点划摸得准不准。'),
-        h('div', {}, '只统计、不记成绩，放心乱拍。'),
+        h('div', {}, '在此连拍若干下，查看点长与划长的估计是否收敛。'),
+        h('div', {}, '仅统计，不计入成绩。'),
       ),
     );
     root.appendChild(
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, '手键校准台'),
+        h('h2', {}, '校准台'),
         pad,
         h('div', { style: { marginTop: '10px' } }, this.statsEl),
         h('div', { style: { marginTop: '10px' } }, this.logEl),
@@ -202,11 +202,11 @@ export class SettingsView {
     const render = () => {
       const st = this.model.stats;
       clear(this.statsEl);
-      this.statsEl.appendChild(meter('点有多长', `${st.dit.toFixed(0)}ms`, `量了 ${st.nDit} 下`));
-      this.statsEl.appendChild(meter('划有多长', `${st.dah.toFixed(0)}ms`, `量了 ${st.nDah} 下`));
-      this.statsEl.appendChild(meter('换算成速度', `${st.wpm.toFixed(1)} WPM`, ''));
-      this.statsEl.appendChild(meter('节奏稳不稳', `${st.rhythmScore}/100`, `忽长忽短 ${(st.cvDit * 100).toFixed(0)}%`));
-      this.statsEl.appendChild(meter('可能听错的比例', `${(st.perSymbolError * 100).toFixed(1)}%`, '越低越稳'));
+      this.statsEl.appendChild(meter('点长', `${st.dit.toFixed(0)}ms`, `样本 ${st.nDit}`));
+      this.statsEl.appendChild(meter('划长', `${st.dah.toFixed(0)}ms`, `样本 ${st.nDah}`));
+      this.statsEl.appendChild(meter('折合速度', `${st.wpm.toFixed(1)} WPM`, ''));
+      this.statsEl.appendChild(meter('节奏稳定度', `${st.rhythmScore}/100`, `浮动 ${(st.cvDit * 100).toFixed(0)}%`));
+      this.statsEl.appendChild(meter('可能误判比例', `${(st.perSymbolError * 100).toFixed(1)}%`, ''));
     };
     render();
 
@@ -219,7 +219,7 @@ export class SettingsView {
       onUp: (edge) => {
         this.app.audio.keyUp();
         if (edge.ignored) {
-          toast(`${Math.round(edge.duration)}ms 这一下没算：${edge.ignoreReason}`, 'warn');
+          toast(`已忽略 ${Math.round(edge.duration)}ms 的一次按键：${edge.ignoreReason}`, 'warn');
           return;
         }
         const gap = lastUp === null ? null : edge.down - lastUp;
@@ -243,9 +243,9 @@ export class SettingsView {
         'div',
         { class: 'dline head' },
         h('span', {}, '#'),
-        h('span', {}, '按下多久'),
-        h('span', {}, '当成'),
-        h('span', {}, '离上一下'),
+        h('span', {}, '时长'),
+        h('span', {}, '判定'),
+        h('span', {}, '间隔'),
         h('span', {}, '把握'),
       ),
     );

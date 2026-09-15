@@ -17,13 +17,12 @@ export class LessonsView {
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, '练什么'),
+        h('h2', {}, '课程'),
         h(
           'p',
           { class: 'dim', style: { fontSize: '13px', lineHeight: '1.7', marginTop: 0 } },
-          '没有随机字母。这里全是有意义的内容：常用简语、信号报告、呼叫格式、完整通联，每条都配了中文意思，',
-          '让你从头就把“声音”和“意思”连起来。',
-          '点任意一课就切过去，下面会列出它包含的每一条。',
+          '没有随机字母。内容为常用简语、信号报告、呼叫格式和完整通联，每条注明中文含义，便于把声音与意思一起记住。',
+          '点任意一课即可切换，下方列出该课的每一条。',
         ),
       ),
     );
@@ -36,11 +35,11 @@ export class LessonsView {
     }
 
     const levelNames: Record<number, string> = {
-      1: '第一步：把点和划分开',
-      2: '通联常用的简语',
-      3: '数字、呼号和标点',
-      4: '完整的一次通联',
-      5: '远距离和比赛节奏',
+      1: '基础：点与划',
+      2: '常用简语',
+      3: '数字、呼号与标点',
+      4: '完整通联',
+      5: '远距离与比赛',
     };
 
     for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
@@ -96,13 +95,13 @@ export class LessonsView {
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, `${this.app.lesson.title}：共 ${items.length} 条`),
+        h('h2', {}, `${this.app.lesson.title}（共 ${items.length} 条）`),
         list,
         h(
           'div',
           { class: 'row', style: { marginTop: '12px' } },
-          h('button', { class: 'btn primary', onclick: () => this.app.go('practice') }, '就练这一条'),
-          h('button', { class: 'btn', onclick: () => this.playAll() }, '把这一课从头听一遍'),
+          h('button', { class: 'btn primary', onclick: () => this.app.go('practice') }, '练习'),
+          h('button', { class: 'btn', onclick: () => this.playAll() }, '连听本课'),
         ),
       ),
     );
@@ -126,7 +125,7 @@ export class LessonsView {
           {
             class: 'cell',
             style: { background: bg },
-            title: `${ch}：${pat}${stats ? `　发过 ${stats.seen} 次，错 ${stats.wrong} 次` : '　还没练过'}`,
+            title: `${ch}：${pat}${stats ? `　${stats.seen} 次，错 ${stats.wrong} 次` : '　未练'}`,
           },
           h('span', {}, ch),
           h('small', {}, pat),
@@ -137,9 +136,9 @@ export class LessonsView {
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, '码表（底色越红，说明你越容易发错）'),
+        h('h2', {}, '码表'),
         table,
-        h('p', { class: 'dim', style: { fontSize: '12px' } }, '灰底 = 还没练过；绿 = 全对；黄 = 偶尔错；红 = 要多练。'),
+        h('p', { class: 'dim', style: { fontSize: '12px' } }, '底色为你的错误率：灰＝未练，绿＝全对，黄＝偶有错误，红＝错误较多。'),
       ),
     );
 
@@ -150,8 +149,8 @@ export class LessonsView {
         h(
           'div',
           { class: 'row' },
-          h('button', { class: 'btn', onclick: () => { this.app.audio.stopPlayback(); } }, '停下来'),
-          h('span', { class: 'dim', style: { fontSize: '12px' } }, '听的是标准节奏，速度按设置里的来。'),
+          h('button', { class: 'btn', onclick: () => { this.app.audio.stopPlayback(); } }, '停止播放'),
+          h('span', { class: 'dim', style: { fontSize: '12px' } }, '按设置中的速度播放标准节奏。'),
         ),
       ),
     );

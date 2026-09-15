@@ -227,12 +227,12 @@ export class KeyInput {
     return edge;
   }
 
-  /** 判断这一次按下是不是“根本不像按键”。返回原因或 null。 */
+  /** 判断这一次按下是不是“根本不像按键”。返回原因或 null（原因里不带时长，由界面补）。 */
   private filterReason(duration: number): string | null {
-    if (duration <= 0) return '零时长';
+    if (duration <= 0) return '时长为零';
     // 1) 绝对下限：挡住电路/驱动的瞬时脉冲（比任何人的点都短得多）
     if (this.opts.debounceMs > 0 && duration < this.opts.debounceMs) {
-      return `只有 ${Math.round(duration)}ms，太短了（短于 ${this.opts.debounceMs}ms 一律忽略）`;
+      return `短于 ${this.opts.debounceMs}ms 的下限`;
     }
     // 2) 自适应：明显短于“点”的按键，通常是按键抖动或误碰。
     //    基准取自时序模型估出的点长，而不是“点划混在一起的中位数”。
@@ -240,7 +240,7 @@ export class KeyInput {
     if (baseline > 0 && this.durations.length >= MIN_SAMPLES_FOR_ADAPTIVE) {
       const floor = baseline * CHATTER_RATIO;
       if (duration < floor) {
-        return `只有 ${Math.round(duration)}ms，明显短于你的点长（约 ${Math.round(baseline)}ms），按抖动忽略`;
+        return `明显短于点长（约 ${Math.round(baseline)}ms）`;
       }
     }
     return null;

@@ -479,19 +479,19 @@ async function main() {
       `[...document.querySelectorAll('.meter')].map(m => m.innerText.replace(/\\n/g,' ')).join(' | ')`,
     );
     console.log(`[screenshot] 指标: ${meters}`);
-    check(/量了 [1-9]/.test(meters), '点/划的样本数不再是 0', meters);
+    check(/样本 [1-9]/.test(meters), '点/划的样本数不再是 0', meters);
 
     // 5) 结算
-    await click(byText('button', '看看成绩'));
+    await click(byText('button', '成绩'));
     await delay(500);
     await shot('05-result');
     const resultText = await cdp.evaluate(`document.querySelector('.modal')?.innerText.replace(/\\n+/g,' | ') ?? ''`);
     check(resultText.length > 0, `结算弹窗有内容：${resultText.slice(0, 80)}`);
-    await click(byText('.modal button', '关上'));
+    await click(byText('.modal button', '关闭'));
     await delay(200);
 
     // 6) 故意发错：目标第 1 条是 E，我们发 T，看红色判定
-    await click(byText('button', '重拍这一条'));
+    await click(byText('button', '重拍'));
     await delay(500);
     const armed2 = await setArmed(true);
     const indicatorDump = await cdp.evaluate(
