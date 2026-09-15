@@ -795,6 +795,28 @@ table.grid td.num {
   color: var(--fg-dim);
 }
 
+/* 校准台的拍发区：一块看得见、点得着的地方 */
+.keypad {
+  border: 1px dashed var(--line-strong);
+  min-height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+  cursor: crosshair;
+  user-select: none;
+  color: var(--fg-dim);
+  font-size: 13px;
+  transition: border-color 0.06s linear;
+}
+
+.keypad.keying {
+  border-style: solid;
+  border-color: var(--dit);
+  color: var(--fg);
+}
+
 /* 指标格 */
 .timing-row {
   display: grid;

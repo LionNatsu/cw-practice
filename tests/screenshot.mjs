@@ -291,29 +291,36 @@ const PATTERNS = {
 };
 
 function makeKeyer(cdp, dit) {
+  // 直键在系统里就是一个鼠标左键：在舞台区里按下、松开
+  let spot = { x: 720, y: 420 };
+  const aim = async () => {
+    const rect = await cdp.evaluate(`(() => {
+      const r = document.getElementById('stage').getBoundingClientRect();
+      return JSON.stringify({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) });
+    })()`);
+    spot = JSON.parse(rect);
+  };
+  const mouse = (type) =>
+    cdp.send('Input.dispatchMouseEvent', {
+      type,
+      x: spot.x,
+      y: spot.y,
+      button: 'left',
+      buttons: type === 'mousePressed' ? 1 : 0,
+      clickCount: 1,
+    });
+
   /** 按住 ms 毫秒；按住到一半时可以插一段回调（用来观察按下去那一刻的界面）。 */
   const hold = async (ms, during) => {
-    await cdp.send('Input.dispatchKeyEvent', {
-      type: 'keyDown',
-      windowsVirtualKeyCode: 32,
-      nativeVirtualKeyCode: 32,
-      code: 'Space',
-      key: ' ',
-      text: ' ',
-    });
+    await mouse('mousePressed');
     await delay(Math.round(ms * 0.6));
     if (during) await during();
     await delay(Math.max(1, ms - Math.round(ms * 0.6)));
-    await cdp.send('Input.dispatchKeyEvent', {
-      type: 'keyUp',
-      windowsVirtualKeyCode: 32,
-      nativeVirtualKeyCode: 32,
-      code: 'Space',
-      key: ' ',
-    });
+    await mouse('mouseReleased');
   };
   const press = (ms) => hold(ms);
   return {
+    aim,
     press,
     hold,
     /** 拍一个字符。 */
@@ -334,6 +341,14 @@ function makeKeyer(cdp, dit) {
         else if (!(await this.char(ch))) return false;
       }
       return true;
+    },
+    /** 直接拍一个码形（不走码表，用来发过程信号）。 */
+    async pattern(pat) {
+      for (let i = 0; i < pat.length; i++) {
+        if (i > 0) await delay(dit);
+        await press(pat[i] === '.' ? dit : dit * 3);
+      }
+      await delay(dit * 3);
     },
   };
 }
@@ -488,6 +503,7 @@ async function main() {
 
     // 4) 真的拍当前条目（用 110ms 的点）
     const keyer = makeKeyer(cdp, 110);
+    await keyer.aim();
 
     // 4a) 按住不放：发报条上要有一根正在长的条，颜色是“点”的颜色
     let liveShape = null;
@@ -636,29 +652,42 @@ async function main() {
 
     // 7b) 全程用手键操作：发 AR（.-.-.）应当换到下一条，不用摸鼠标
     const itemBefore = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);
-    for (const sym of '.-.-.') {
-      await keyer.press(sym === '.' ? 110 : 330);
-      await delay(110);
-    }
+    await keyer.pattern('.-.-.');
     await delay(900);
     const itemAfter = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);
     console.log(`[screenshot] 发 AR: ${JSON.stringify(itemBefore)} → ${JSON.stringify(itemAfter)}`);
-    check(itemBefore !== itemAfter, '发 AR 直接换到下一条（全程不用鼠标）');
+    check(itemBefore !== itemAfter, '发 AR 直接换到下一条（不用去点按钮）');
     await shot('08b-prosign-next');
 
     // 7c) 再发 BK（-...-.-）回到上一条
-    for (const sym of '-...-.-') {
-      await keyer.press(sym === '.' ? 110 : 330);
-      await delay(110);
-    }
+    await keyer.pattern('-...-.-');
     await delay(900);
     const itemBack = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);
     console.log(`[screenshot] 发 BK: ${JSON.stringify(itemAfter)} → ${JSON.stringify(itemBack)}`);
     check(itemBack === itemBefore, '发 BK 直接回到上一条');
 
-    // 8) 设置页（校准台）
+    // 8) 设置页：校准台拍几下，读数要出来
     await click(byText('.tab', '设置'));
     await delay(400);
+    const pad = JSON.parse(
+      await cdp.evaluate(`(() => {
+        const r = document.getElementById('calib-pad').getBoundingClientRect();
+        return JSON.stringify({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) });
+      })()`),
+    );
+    const padPress = async (ms) => {
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pad.x, y: pad.y, button: 'left', buttons: 1, clickCount: 1 });
+      await delay(ms);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pad.x, y: pad.y, button: 'left', buttons: 0, clickCount: 1 });
+      await delay(140);
+    };
+    for (const ms of [110, 110, 330, 110, 330, 330]) await padPress(ms);
+    const padText = await cdp.evaluate(
+      `document.getElementById('calib-pad')?.parentElement?.innerText.replace(/\\n+/g,' ') ?? ''`,
+    );
+    console.log(`[screenshot] 校准台: ${JSON.stringify(padText.slice(0, 70))}`);
+    check(/点长\s*\d+ms/.test(padText), '校准台拍几下就有了读数');
+    check(/划长\s*\d+ms/.test(padText), '校准台也报出了划长');
     await shot('09-settings');
 
     // 9) 统计页

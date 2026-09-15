@@ -468,6 +468,15 @@ console.log(`[smoke] 按钮上码形的码元数: ${JSON.stringify(miniCounts)}`
 // 真的拍一段报文进去（用 window 级键盘事件当直键）
 const { ALL_CHAR_TO_PATTERN } = await import(`${corePrefix}morse.js`);
 
+// 直键在系统里就是一个鼠标左键：在舞台区按下、松开
+const stage = document.getElementById('stage');
+const keyDown = () => {
+  stage.dispatchEvent({ type: 'mousedown', button: 0, preventDefault() {} });
+};
+const keyUp = () => {
+  document.dispatchWindow('mouseup', { button: 0, preventDefault() {} });
+};
+
 /** 拍一个码字：点 100ms、划 300ms、码元间隔 100ms、字间隔 300ms。 */
 let sawLiveShape = false;
 function keyChar(ch, dit) {
@@ -478,12 +487,12 @@ function keyChar(ch, dit) {
     if (!first) advance(dit); // 码元间隔
     first = false;
     const dur = sym === '.' ? dit : dit * 3;
-    document.dispatchWindow('keydown', { code: 'Space', repeat: false });
+    keyDown();
     advance(Math.round(dur / 2));
     // 按住的时候，发报条上要有一根正在长的条
     if (document.querySelectorAll('.sent .sym.live').length > 0) sawLiveShape = true;
     advance(Math.round(dur / 2));
-    document.dispatchWindow('keyup', { code: 'Space', repeat: false });
+    keyUp();
   }
   advance(dit * 3); // 字间隔
 }
@@ -495,9 +504,9 @@ function keyPattern(pattern, dit) {
     if (!first) advance(dit);
     first = false;
     const dur = sym === '.' ? dit : dit * 3;
-    document.dispatchWindow('keydown', { code: 'Space', repeat: false });
+    keyDown();
     advance(dur);
-    document.dispatchWindow('keyup', { code: 'Space', repeat: false });
+    keyUp();
   }
   advance(dit * 3);
 }

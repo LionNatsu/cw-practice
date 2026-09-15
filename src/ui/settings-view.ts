@@ -36,18 +36,6 @@ export class SettingsView {
         }),
       );
 
-    const check = (label: string, value: boolean, onChange: (v: boolean) => void, hint = '') =>
-      h(
-        'label',
-        { class: 'inline' },
-        h('input', {
-          type: 'checkbox',
-          checked: value,
-          onchange: (e: Event) => onChange((e.target as HTMLInputElement).checked),
-        }),
-        `${label}${hint ? `（${hint}）` : ''}`,
-      );
-
     root.appendChild(
       h(
         'div',
@@ -102,26 +90,11 @@ export class SettingsView {
       ),
     );
 
-    root.appendChild(
-      h(
-        'div',
-        { class: 'card' },
-        h('h2', {}, '输入方式'),
-        h(
-          'div',
-          { class: 'row' },
-          check('鼠标左键（HID 直键练习器）', s.allowMouseLeft, (v) => this.app.saveSettings({ allowMouseLeft: v })),
-          check('鼠标右键', s.allowRightButton, (v) => this.app.saveSettings({ allowRightButton: v })),
-          check('键盘的空格 / J / K / 回车', s.allowKeyboard, (v) => this.app.saveSettings({ allowKeyboard: v })),
-        ),
-      ),
-    );
-
     // 校准台：连拍若干下，看点长估计收敛到多少
     this.statsEl = h('div', { class: 'timing-row' });
     const pad = h(
       'div',
-      { class: 'keypad armed', id: 'calib-pad' },
+      { class: 'keypad', id: 'calib-pad' },
       h('div', { class: 'hint' }, h('div', {}, '在这里随便拍几下，看点划时长是多少。')),
     );
     root.appendChild(
@@ -129,6 +102,7 @@ export class SettingsView {
         'div',
         { class: 'card' },
         h('h2', {}, '校准台'),
+        h('p', { class: 'dim', style: { fontSize: '12px' } }, '直键在系统里就是一个鼠标左键，左键按住 / 松开即可。'),
         pad,
         h('div', { style: { marginTop: '10px' } }, this.statsEl),
       ),
@@ -158,11 +132,12 @@ export class SettingsView {
 
     this.input = new KeyInput(pad, {
       debounceMs: 18,
-      allowMouseLeft: true,
-      allowRightButton: true,
-      allowKeyboard: true,
-      onDown: () => this.app.audio.keyDown(),
+      onDown: () => {
+        pad.classList.add('keying');
+        this.app.audio.keyDown();
+      },
       onUp: (edge) => {
+        pad.classList.remove('keying');
         this.app.audio.keyUp();
         if (edge.ignored) {
           toast(`已忽略 ${Math.round(edge.duration)}ms 的一次按键：${edge.ignoreReason}`, 'warn');
@@ -173,6 +148,8 @@ export class SettingsView {
         render();
       },
     });
+    // 校准台一直可以拍，不用先“开始”
+    this.input.setLive(true);
   }
 }
 

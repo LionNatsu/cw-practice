@@ -117,18 +117,6 @@ export class PracticeView {
           this.togglePause();
           return true;
         }
-        if (ev.code === 'KeyR') {
-          void this.replayReference();
-          return true;
-        }
-        if (ev.code === 'KeyN') {
-          this.nextItem();
-          return true;
-        }
-        if (ev.code === 'KeyP') {
-          this.prevItem();
-          return true;
-        }
         return false;
       }),
     );
@@ -148,10 +136,6 @@ export class PracticeView {
   private attachInput(): void {
     this.input = new KeyInput(this.stageEl, {
       debounceMs: 18,
-      allowMouseLeft: this.app.settings.allowMouseLeft,
-      allowRightButton: this.app.settings.allowRightButton,
-      allowKeyboard: this.app.settings.allowKeyboard,
-      isLive: () => !this.paused,
       onDown: (down) => {
         if (this.paused) return;
         // 浏览器要求音频由用户手势启动。第一下按键就是手势，不用先点按钮。

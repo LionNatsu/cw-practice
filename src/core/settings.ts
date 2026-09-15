@@ -9,12 +9,6 @@ export interface AppSettings {
   toneHz: number;
   /** 侧音音量 0..1。 */
   volume: number;
-  /** 是否允许用鼠标左键当直键（没插硬件时也能练）。 */
-  allowMouseLeft: boolean;
-  /** 是否允许右键。 */
-  allowRightButton: boolean;
-  /** 是否允许键盘（空格 / J / K 键）。 */
-  allowKeyboard: boolean;
   /** 上次练习的课程 id。 */
   lastLessonId: string;
   /** 上次练习的条目下标。 */
@@ -26,9 +20,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wpm: 12,
   toneHz: 700,
   volume: 0.35,
-  allowMouseLeft: true,
-  allowRightButton: true,
-  allowKeyboard: true,
   lastLessonId: 'l1-rhythm',
   lastItemIndex: 0,
 };
