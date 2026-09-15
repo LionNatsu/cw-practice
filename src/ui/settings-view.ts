@@ -219,8 +219,7 @@ export class SettingsView {
       onUp: (edge) => {
         this.app.audio.keyUp();
         if (edge.ignored) {
-          toast(`已忽略 ${Math.round(edge.duration)}ms 的一次按键：${edge.ignoreReason}`, 'warn');
-          return;
+          toast(`已忽略 ${Math.round(edge.duration)}ms 的一次按键：${edge.ignoreReason}`, 'warn');          return;
         }
         const gap = lastUp === null ? null : edge.down - lastUp;
         lastUp = edge.up;

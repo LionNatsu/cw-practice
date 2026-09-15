@@ -6,7 +6,7 @@
  *  2) 这一条的中文意思和小提示
  *  3) 要发的字：每个字上面画着它该怎么发，发对了变绿、发错了变红
  *  4) 你发出来的内容：已经认出来的用实心字，还没定的用斜体
- *  5) 当前状态：手速、正确率、节奏、点长划长、这一下的把握
+ *  5) 当前状态：手速、正确率、节奏、点长划长、本次判定把握
  *  6) 按键记录：每一下按了多久、被当成点还是划、跟上一下隔了多久
  */
 
@@ -459,19 +459,7 @@ export class PracticeView {
 
   private appendNewDiagnostics(snap: SessionSnapshot): void {
     const symbols = this.session.allSymbols;
-    if (this.diagEl.childElementCount === 0) {
-      this.diagEl.appendChild(
-        h(
-          'div',
-          { class: 'dline head' },
-          h('span', {}, '#'),
-          h('span', {}, '时长'),
-          h('span', {}, '判定'),
-          h('span', {}, '间隔'),
-          h('span', {}, '依据'),
-        ),
-      );
-    }
+    this.ensureDiagHeader();
     for (let i = this.lastSymbolCount; i < symbols.length; i++) {
       const s = symbols[i]!;
       this.diagEl.appendChild(
@@ -495,16 +483,35 @@ export class PracticeView {
     this.diagEl.scrollTop = this.diagEl.scrollHeight;
   }
 
+  /** 补一行“被忽略的按键”。正常拍发不出现这种行。 */
   private addDiagLine(edge: KeyEdge, reason: string): void {
+    this.ensureDiagHeader();
     this.diagEl.appendChild(
       h(
         'div',
         { class: 'dline' },
         h('span', {}, '×'),
         h('span', {}, `${Math.round(edge.duration)}ms`),
-        h('span', { class: 'warn' }, '没算'),
+        h('span', { class: 'warn' }, '忽略'),
         h('span', {}, '—'),
         h('span', { class: 'warn' }, reason),
+      ),
+    );
+    this.diagEl.scrollTop = this.diagEl.scrollHeight;
+  }
+
+  /** 建表头（只建一次）。被忽略的按键也要能出现在记录里，所以单独抽出来。 */
+  private ensureDiagHeader(): void {
+    if (this.diagEl.childElementCount > 0) return;
+    this.diagEl.appendChild(
+      h(
+        'div',
+        { class: 'dline head' },
+        h('span', {}, '#'),
+        h('span', {}, '时长'),
+        h('span', {}, '判定'),
+        h('span', {}, '间隔'),
+        h('span', {}, '依据'),
       ),
     );
   }
