@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "test": "node --experimental-strip-types tests/core.test.ts",
     "test:watch": "node --watch --experimental-strip-types tests/core.test.ts",
+    "test:smoke": "node scripts/build.mjs && node tests/dom-smoke.mjs dist",
+    "serve": "node scripts/serve.mjs dist 8080",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

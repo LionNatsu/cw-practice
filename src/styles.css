@@ -384,44 +384,56 @@ label.inline {
   letter-spacing: 0.5px;
 }
 
+/* 判定状态。
+   注意选择器要带上 .done 来把优先级抬到 (0,3,0)：
+   基础规则 `.tchar .blocks .dot` 是 (0,2,0) 且写在前面，
+   如果这里也用 (0,2,0)，后写的虽然会赢，但只要再叠一个状态类就会翻车
+   （实测"发对了"的点划一直显示成灰色，就是被基础规则盖掉了）。 */
 .tchar.current {
   background: #1a2634;
   border-color: var(--accent);
   transform: translateY(-2px);
 }
 
-.tchar.current .ch,
-.tchar.current .blocks .dot,
-.tchar.current .blocks .dash {
-  color: var(--accent);
-  background-color: var(--accent);
-}
-
 .tchar.current .ch {
+  color: var(--accent);
   background: none;
 }
 
-.tchar.correct .ch {
+.tchar.current .blocks .dot,
+.tchar.current .blocks .dash {
+  background: var(--accent);
+}
+
+.tchar.done.correct .ch {
   color: var(--good);
 }
 
-.tchar.correct .blocks .dot,
-.tchar.correct .blocks .dash {
+.tchar.done.correct .blocks .dot,
+.tchar.done.correct .blocks .dash {
   background: var(--good);
 }
 
-.tchar.wrong .ch {
+.tchar.done.correct {
+  border-color: rgba(85, 214, 139, 0.35);
+}
+
+.tchar.done.wrong .ch {
   color: var(--bad);
   text-decoration: line-through;
 }
 
-.tchar.wrong .blocks .dot,
-.tchar.wrong .blocks .dash {
+.tchar.done.wrong .blocks .dot,
+.tchar.done.wrong .blocks .dash {
   background: var(--bad);
 }
 
+.tchar.done.wrong {
+  border-color: rgba(255, 107, 107, 0.3);
+}
+
 .tchar.done {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .tchar .badge {

@@ -1,8 +1,11 @@
 /**
  * 入口：装配 App、路由与各视图。
+ *
+ * 注意：样式是在 index.html 里用 <link> 引入的，**不要**在这里 import './styles.css'。
+ * 这样无论走 Vite 打包还是走 scripts/build.mjs 的零依赖构建，样式都能正常加载，
+ * 而且源码也能被裸 Node 直接加载（便于无浏览器的冒烟测试）。
  */
 
-import './styles.css';
 import { App, type Tab, type View } from './App.ts';
 import { PracticeView } from './ui/practice-view.ts';
 import { LessonsView } from './ui/lessons-view.ts';

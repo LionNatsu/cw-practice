@@ -74,6 +74,9 @@ export class TimingModel {
   private dahLogs: number[] = [];
   /** 最近一批按键的原始时长，用来自适应重估模型。 */
   private recent: number[] = [];
+  /** 本次自适应重估里被判为"点 / 划"的样本数（用于指标显示，别用聚类结果直接当置信度）。 */
+  private countDit = 0;
+  private countDah = 0;
   private window = 40;
   /** 速度是否被用户锁定（锁定后 ditMs 不随观测漂移，但仍统计节奏）。 */
   speedLocked = false;
@@ -226,6 +229,8 @@ export class TimingModel {
     }
     this.ditObs = ditList;
     this.dahObs = dahList;
+    this.countDit = ditList.length;
+    this.countDah = dahList.length;
     this.ditLogs = ditList.map((d) => Math.log(d / this.ditMs));
     this.dahLogs = dahList.map((d) => Math.log(d / this.dahMs));
   }
@@ -268,8 +273,8 @@ export class TimingModel {
       dah: this.dahMs,
       cvDit: this.sigmaDit,
       cvDah: this.sigmaDah,
-      nDit: this.ditObs.length,
-      nDah: this.dahObs.length,
+      nDit: this.countDit,
+      nDah: this.countDah,
       perSymbolError: this.perSymbolError,
       rhythmScore: this.rhythmScore,
       wpm: this.wpm,

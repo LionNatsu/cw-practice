@@ -1,5 +1,7 @@
 node_modules/
 dist/
 .vite/
+.tmp-artifact/
+.shots/
 *.log
 .DS_Store

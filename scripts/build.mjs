@@ -88,11 +88,9 @@ async function main() {
     count++;
   }
 
-  // index.html：入口与样式路径换成构建产物
+  // index.html：入口与样式路径换成构建产物（相对路径，方便部署到子目录）
   const html = await readFile(path.join(root, 'index.html'), 'utf8');
-  const builtHtml = html
-    .replace('/src/styles.css', './styles.css')
-    .replace('/src/main.ts', './main.js');
+  const builtHtml = html.replace('src/styles.css', './styles.css').replace('src/main.ts', './main.js');
   await writeFile(path.join(outDir, 'index.html'), builtHtml, 'utf8');
 
   console.log(`[build] 完成：${count} 个源文件 → dist/`);
