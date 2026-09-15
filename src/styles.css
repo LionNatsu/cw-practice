@@ -284,12 +284,9 @@ label.inline {
   justify-content: center;
   padding: 20px;
   user-select: none;
+  /* 中间的整块区域就是手键：光标提示这里能点 */
   cursor: crosshair;
   position: relative;
-}
-
-.stage.live {
-  cursor: default;
 }
 
 /* 按下时整块舞台的边界亮起，作为最直接的“在发报”反馈 */
@@ -528,7 +525,7 @@ label.inline {
   width: 0.7em;
 }
 
-/* 底部：三个动作 + 一行状态数字 */
+/* 底部：四个动作，各带一个过程信号 */
 .practice-foot {
   border-top: 1px solid var(--line);
   padding: 12px 20px;
@@ -536,6 +533,30 @@ label.inline {
   align-items: center;
   gap: 10px;
   flex: none;
+}
+
+/* 按钮上的过程信号：告诉用户这个动作也能拍出来 */
+.btn .prosign {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-dim);
+  margin-left: 8px;
+  letter-spacing: 1px;
+}
+
+.btn:hover .prosign {
+  color: var(--fg);
+}
+
+/* 该干下一步了（整条发完时） */
+.btn.attention {
+  border-color: var(--good);
+  color: var(--fg);
+}
+
+/* 暂停时底部只留一行字 */
+.sent.quiet-row {
+  min-height: 46px;
 }
 
 /* ==========================================================================

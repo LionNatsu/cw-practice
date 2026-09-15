@@ -449,12 +449,17 @@ if (tchars.length > 0) {
   check(!!center && center.textContent.length > 0, `中心字符可见：${JSON.stringify(center?.textContent ?? '')}`);
 }
 
-// 开始拍发（按 id 点，别靠按钮文案——文案会改，id 不会）
-const armBtn = document.getElementById('arm-toggle');
-check(!!armBtn, '找到「开始」按钮（id=arm-toggle）');
-armBtn?.click();
-advance(20);
-check(document.querySelectorAll('.live-dot.on').length === 1, '开始后指示灯变绿（.live-dot.on）');
+// 直接就能拍：没有“开始”这一步
+check(!document.getElementById('arm-toggle'), '练习页没有「开始」按钮');
+check(document.querySelectorAll('.live-dot.on').length === 1, '进来就是拍发状态（.live-dot.on）');
+for (const id of ['replay', 'retry', 'next', 'score']) {
+  check(!!document.getElementById(`action-${id}`), `底部有 ${id} 动作（id=action-${id}）`);
+}
+const prosigns = document.querySelectorAll('.btn .prosign').map((e) => e.textContent);
+check(
+  ['?', 'HH', 'AR', 'SK'].every((p) => prosigns.includes(p)),
+  `按钮上标了过程信号：${JSON.stringify(prosigns)}`,
+);
 
 // 真的拍一段报文进去（用 window 级键盘事件当直键）
 const { ALL_CHAR_TO_PATTERN } = await import(`${corePrefix}morse.js`);
@@ -477,6 +482,20 @@ function keyChar(ch, dit) {
     document.dispatchWindow('keyup', { code: 'Space', repeat: false });
   }
   advance(dit * 3); // 字间隔
+}
+
+/** 拍一个码形（不走码表，用来发过程信号）。 */
+function keyPattern(pattern, dit) {
+  let first = true;
+  for (const sym of pattern) {
+    if (!first) advance(dit);
+    first = false;
+    const dur = sym === '.' ? dit : dit * 3;
+    document.dispatchWindow('keydown', { code: 'Space', repeat: false });
+    advance(dur);
+    document.dispatchWindow('keyup', { code: 'Space', repeat: false });
+  }
+  advance(dit * 3);
 }
 
 // 目标文本的第一条（第 1 课是单字符）
@@ -505,13 +524,22 @@ check(correctCells > 0, `有字符被判对（${correctCells} 个 .cell.correct�
 const dists = document.querySelectorAll('.cell').map((c) => c.dataset.dist);
 check(dists.includes('0'), `中心字符带 dist=0 标记：${JSON.stringify(dists)}`);
 
-// 结算
-const settleBtn = document.querySelectorAll('button').find((b) => b.textContent.trim() === '成绩');
-check(!!settleBtn, '找到「成绩」按钮');
-settleBtn?.click();
-advance(50);
+// 用手键直接操作：发 AR 应当换到下一条
+const itemBefore = document.querySelectorAll('.practice-bar')[0]?.textContent ?? '';
+keyPattern('.-.-.', dit); // <AR>
+advance(120);
+const itemAfter = document.querySelectorAll('.practice-bar')[0]?.textContent ?? '';
+check(itemBefore !== itemAfter, `发 AR 换到了下一条（${JSON.stringify(itemBefore.slice(-12))} → ${JSON.stringify(itemAfter.slice(-12))}）`);
+check(
+  document.querySelectorAll('.cell.correct').length === 0,
+  '换条目之后进度归零（新的引擎）',
+);
+
+// 结算：也用手键（SK = ...-.-）
+keyPattern('...-.-', dit);
+advance(120);
 const modal = document.querySelectorAll('.modal')[0];
-check(!!modal, '结算弹窗弹出来了');
+check(!!modal, '发 SK 弹出结算');
 if (modal) {
   check(/\d/.test(modal.textContent), `弹窗里有成绩：${JSON.stringify(modal.textContent.slice(0, 60))}`);
   const closeBtn = modal.querySelectorAll('button').find((b) => b.textContent.includes('关闭'));
@@ -519,6 +547,15 @@ if (modal) {
   advance(20);
   check(document.querySelectorAll('.modal').length === 0, '弹窗能关闭');
 }
+
+// 鼠标也仍然能用：点「成绩」
+const scoreBtn = document.getElementById('action-score');
+check(!!scoreBtn, '找到「成绩」按钮（id=action-score）');
+scoreBtn?.click();
+advance(50);
+check(document.querySelectorAll('.modal').length === 1, '点按钮同样能结算');
+document.querySelectorAll('.modal button').find((b) => b.textContent.includes('关闭'))?.click();
+advance(20);
 
 // 其它 tab 都能渲染
 for (const tab of ['lessons', 'stats', 'settings', 'help']) {

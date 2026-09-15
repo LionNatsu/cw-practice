@@ -11,6 +11,11 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   ...children: Child[]
 ): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
+  // 按钮不抢焦点：练习页的键位（空格 / J / K / 回车）必须始终留给手键，
+  // 否则点过一次按钮之后，空格就变成“再按一次这个按钮”了。
+  if (tag === 'button') {
+    el.addEventListener('mousedown', (e) => e.preventDefault());
+  }
   if (attrs) {
     for (const [k, v] of Object.entries(attrs)) {
       if (v === null || v === undefined || v === false) continue;

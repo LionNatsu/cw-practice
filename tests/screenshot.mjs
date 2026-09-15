@@ -399,11 +399,6 @@ async function main() {
     return false;
   };
   const isArmed = () => cdp.evaluate(`!!document.querySelector('.live-dot.on')`);
-  const setArmed = async (want) => {
-    if ((await isArmed()) === want) return true;
-    await clickId('arm-toggle');
-    return waitFor(want ? `document.querySelector('.live-dot.on')` : `document.querySelector('.live-dot')`);
-  };
 
   try {
     const target = await waitForCdp(DEBUG_PORT);
@@ -451,7 +446,6 @@ async function main() {
     const lessonClicked = await click(byText('.lesson', '第 9 课'));
     console.log(`[screenshot] 点第 9 课: ${lessonClicked}`);
     await delay(800);
-    await setArmed(true);
     const longTarget = await cdp.evaluate(
       `[...document.querySelectorAll('.cell .glyph')].map(e=>e.textContent).join('')`,
     );
@@ -478,13 +472,13 @@ async function main() {
     await delay(700);
     await cdp.evaluate(`document.getElementById('lesson-item-0')?.click()`);
     await delay(700);
-    await setArmed(true);
 
     // 回到第 1 条（单字 E），走一遍“拍对”的流程
     await click(`document.getElementById('lesson-item-0')`);
     await delay(600);
-    await setArmed(true);
-    check(await isArmed(), '开始后指示灯变绿（.live-dot.on）');
+    check(await isArmed(), '进练习页就是拍发状态，不用先点开始（.live-dot.on）');
+    const hasArm = await cdp.evaluate(`!!document.getElementById('arm-toggle')`);
+    check(!hasArm, '页面上没有「开始」按钮');
     await shot('03-armed');
 
     // 4) 真的拍当前条目（用 110ms 的点）
@@ -511,7 +505,6 @@ async function main() {
     await delay(500);
     await click(byText('button', '重来'));
     await delay(500);
-    await setArmed(true);
     await delay(300);
 
     const target1 = await cdp.evaluate(
@@ -560,8 +553,7 @@ async function main() {
     //    新行为：拍错的字不认，给负反馈（问号 + 没抄清），等重拍。
     await click(byText('button', '重来'));
     await delay(600);
-    const armed2 = await setArmed(true);
-    check(armed2, '重来之后仍能开始拍发');
+    check(await isArmed(), '重来之后仍在拍发状态');
     const targetWrong = await cdp.evaluate(
       `[...document.querySelectorAll(".cell[data-dist='0'] .glyph")].map(e=>e.textContent).join('')`,
     );
@@ -610,8 +602,7 @@ async function main() {
     await shot('07-lessons');
     await click(byText('.lesson', '第 9 课'));
     await delay(800);
-    const armedLong = await setArmed(true);
-    console.log(`[screenshot] 长条目已开始=${armedLong} armed=${await isArmed()}`);
+    console.log(`[screenshot] 长条目拍发中=${await isArmed()}`);
     const targetLong = await cdp.evaluate(
       `[...document.querySelectorAll(".cell .glyph")].map(e=>e.textContent).join('')`,
     );
@@ -637,6 +628,18 @@ async function main() {
     check(!!ls.center, '中心位置始终有字符（透镜聚焦）');
     check(ls.center === targetLong[ls.correct], `中心应对准下一个要发的字（认下 ${ls.correct} 个，中心是 ${ls.center}，下一个应是 ${targetLong[ls.correct]}）`);
     check(ls.gap, '报文里能看出分词断句（词之间有空格）');
+
+    // 7b) 全程用手键操作：发 AR（.-.-.）应当换到下一条，不用摸鼠标
+    const itemBefore = await cdp.evaluate(`document.querySelector('.practice-bar')?.innerText.replace(/\\n/g,' ') ?? ''`);
+    for (const sym of '.-.-.') {
+      await keyer.press(sym === '.' ? 110 : 330);
+      await delay(110);
+    }
+    await delay(900);
+    const itemAfter = await cdp.evaluate(`document.querySelector('.practice-bar')?.innerText.replace(/\\n/g,' ') ?? ''`);
+    console.log(`[screenshot] 发 AR: ${JSON.stringify(itemBefore.slice(-14))} → ${JSON.stringify(itemAfter.slice(-14))}`);
+    check(itemBefore !== itemAfter, '发 AR 直接换到下一条（全程不用鼠标）');
+    await shot('08b-prosign-next');
 
     // 8) 设置页（校准台）
     await click(byText('.tab', '设置'));

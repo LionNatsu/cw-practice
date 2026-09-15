@@ -6,3 +6,4 @@ dist/
 *.log
 .DS_Store
 cdp-profile/
+.commit-msg.txt

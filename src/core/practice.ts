@@ -87,6 +87,29 @@ export function classifyDuration(duration: number, unitMs: number): SymbolKind {
   return duration < unitMs * THRESHOLDS.dahRatio ? 'dit' : 'dah';
 }
 
+/* ============================ 过程信号 ============================ */
+
+/** 用过程信号直接操作界面：不用退出拍发，也不用摸鼠标。 */
+export type CommandId = 'next' | 'retry' | 'replay' | 'score';
+
+/**
+ * 码形 → 命令。
+ *
+ * 都是业余无线电里真的有人这么用的过程信号：
+ *   <AR> .-.-.   报文结束     → 下一条
+ *   <SK> ...-.-  结束联络     → 结算成绩
+ *   ?    ..--..  请重发       → 重听示范
+ *   <HH> ........ 发错了      → 本条重来（8 个点，不是任何字符的码形）
+ *
+ * 目标字优先：课上正好在练 ? 时，它就是目标字，不是命令。
+ */
+export const COMMANDS: Readonly<Record<string, CommandId>> = {
+  '.-.-.': 'next',
+  '...-.-': 'score',
+  '..--..': 'replay',
+  '........': 'retry',
+};
+
 /** 一个候选单位假设的代价，以及它读出来的码形。 */
 interface Hypothesis {
   unit: number;
@@ -266,8 +289,8 @@ export interface PracticeState {
   holdingMs: number;
   /** 拍错的负反馈；没拍错时为 null。 */
   confused: Confusion | null;
-  /** 已经能读出的部分，界面用来显示“对方听到了什么”。 */
-  heard: { text: string; recognized: boolean } | null;
+  /** 刚收到一个过程信号（发 AR 就是下一条，等等）；没收到时为 null。 */
+  command: { id: CommandId; seq: number } | null;
   /** 每个位置拍错过几次。 */
   wrongAt: ReadonlyMap<number, number>;
   /** 单位时长（ms）。 */
@@ -291,6 +314,8 @@ export class PracticeEngine {
   private pressCount = 0;
   private wrongCountValue = 0;
   private wrongSeq = 0;
+  private command: { id: CommandId; seq: number } | null = null;
+  private commandSeq = 0;
   private confused: Confusion | null = null;
   private readonly wrongAt = new Map<number, number>();
   private ditSamples: number[] = [];
@@ -378,16 +403,8 @@ export class PracticeEngine {
     // 又开始拍了，上一次的负反馈收起来
     this.confused = null;
 
-    // 这一下正好把这个字发全了，直接收下，不用再等停顿。
-    // 码形与字是一一对应的，读出来等于目标，就说明这个字已经完整。
-    const want = this.expected?.ch;
-    if (want === undefined) return;
-    const reading = this.read();
-    if (reading.single && reading.text === want) {
-      this.learn(reading);
-      this.clearAttempt();
-      this.accept();
-    }
+    // 这一下正好把这个字发全了（或者发出一个过程信号），立刻办，不用再等停顿
+    this.resolveIfComplete();
   }
 
   /**
@@ -417,7 +434,7 @@ export class PracticeEngine {
       holding: this.holdingSince === null ? null : classifyDuration(Math.max(1, this.now - this.holdingSince), this.unit),
       holdingMs: this.holdingSince === null ? 0 : Math.max(0, this.now - this.holdingSince),
       confused: this.confused,
-      heard: reading ? { text: reading.segments.join(' '), recognized: reading.recognized } : null,
+      command: this.command,
       wrongAt: this.wrongAt,
       unitMs: this.unit,
       wpm: 1200 / this.unit,
@@ -429,19 +446,50 @@ export class PracticeEngine {
 
   /* ---------------- 判定 ---------------- */
 
+  /**
+   * 这次尝试已经读成了一个完整的字，就当场办掉：收下目标字，或者执行过程信号。
+   *
+   * 码形与字是一一对应的，读出来等于目标，就说明这个字已经完整，
+   * 不必再等停顿 —— 手感是跟手的。
+   */
+  private resolveIfComplete(): boolean {
+    const reading = this.read();
+    if (!reading.single || reading.kinds.length > THRESHOLDS.maxSymbols) return false;
+
+    const want = this.expected?.ch;
+    if (want !== undefined && reading.text === want) {
+      this.learn(reading);
+      this.clearAttempt();
+      this.accept();
+      return true;
+    }
+    const cmd = COMMANDS[reading.pattern];
+    if (cmd) {
+      this.learn(reading);
+      this.clearAttempt();
+      this.fireCommand(cmd);
+      return true;
+    }
+    return false;
+  }
+
+  /** 判一个停顿：先看是不是完整的字，不是就按拍错处理。 */
   private judge(): void {
+    if (this.resolveIfComplete()) return;
+
     const reading = this.read();
     const want = this.expected?.ch;
-
     this.learn(reading);
     this.clearAttempt();
     if (want === undefined) return;
-    // 码元多到不可能是一个字了，不必再等
-    if (reading.single && reading.kinds.length <= THRESHOLDS.maxSymbols && reading.text === want) {
-      this.accept();
-      return;
-    }
     this.reject(reading);
+  }
+
+  /** 收到一个过程信号。引擎只负责报出来，怎么动由界面决定。 */
+  private fireCommand(id: CommandId): void {
+    this.commandSeq++;
+    this.command = { id, seq: this.commandSeq };
+    this.confused = null;
   }
 
   /** 收下这个字。 */
