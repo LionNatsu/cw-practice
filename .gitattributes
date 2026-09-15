@@ -1,0 +1,8 @@
+# 统一用 LF：CI（Linux）与本地 Windows 之间不产生纯换行差异。
+* text=auto eol=lf
+
+# 二进制资源保持原样
+*.exe binary
+*.png binary
+*.jpg binary
+*.woff2 binary
