@@ -5,15 +5,27 @@
  * 现在只回答三个问题：怎么拍、想干别的怎么办、识别为什么有时会改口。
  */
 
-import { h } from './dom.ts';
+import { h, patternMini } from './dom.ts';
+import { COMMAND_INFO, type CommandId } from '../core/practice.ts';
 
 export function renderHelp(root: HTMLElement): void {
   const key = (k: string) => h('kbd', {}, k);
+  /** 一行过程信号：名字 + 码形 + 干什么用。 */
+  const command = (id: CommandId) => {
+    const info = COMMAND_INFO[id];
+    return h(
+      'div',
+      { class: 'cmd' },
+      h('b', {}, info.name),
+      patternMini(info.pattern),
+      h('span', { class: 'what' }, info.label),
+    );
+  };
 
   root.appendChild(
     h(
       'div',
-      { class: 'page' },
+      { class: 'page help' },
       h(
         'div',
         { class: 'card' },
@@ -32,31 +44,22 @@ export function renderHelp(root: HTMLElement): void {
           key('回车'),
           ' 都可以当直键。',
         ),
+        h('p', {}, '短促一按是点，按住约三倍时长是划。'),
         h(
           'div',
           { class: 'row', style: { gap: '24px', fontSize: '13px', color: 'var(--fg-dim)' } },
           h('span', {}, key('Esc'), ' 暂停 / 继续'),
           h('span', {}, key('R'), ' 重听示范'),
           h('span', {}, key('N'), ' 下一条'),
+          h('span', {}, key('P'), ' 上一条'),
         ),
       ),
       h(
         'div',
         { class: 'card' },
         h('h2', {}, '用手键操作'),
-        h(
-          'p',
-          {},
-          '底部的四个动作都能直接拍出来，练习中途不用去摸鼠标：',
-        ),
-        h(
-          'div',
-          { class: 'row', style: { gap: '28px', fontSize: '13px', color: 'var(--fg-dim)' } },
-          h('span', {}, h('b', {}, 'AR'), ' .-.-.　下一条'),
-          h('span', {}, h('b', {}, 'HH'), ' ........　本条重来'),
-          h('span', {}, h('b', {}, '?'), ' ..--..　重听示范'),
-          h('span', {}, h('b', {}, 'SK'), ' ...-.-　结算成绩'),
-        ),
+        h('p', {}, '底部这些动作都能直接拍出来，练习中途不用去摸鼠标：'),
+        h('div', { class: 'cmd-list' }, command('prev'), command('next'), command('retry'), command('replay'), command('score')),
         h(
           'p',
           { class: 'dim', style: { fontSize: '12px' } },

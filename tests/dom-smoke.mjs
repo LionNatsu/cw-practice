@@ -452,14 +452,18 @@ if (tchars.length > 0) {
 // 直接就能拍：没有“开始”这一步
 check(!document.getElementById('arm-toggle'), '练习页没有「开始」按钮');
 check(document.querySelectorAll('.live-dot.on').length === 1, '进来就是拍发状态（.live-dot.on）');
-for (const id of ['replay', 'retry', 'next', 'score']) {
+for (const id of ['prev', 'replay', 'retry', 'next', 'score']) {
   check(!!document.getElementById(`action-${id}`), `底部有 ${id} 动作（id=action-${id}）`);
 }
 const prosigns = document.querySelectorAll('.btn .prosign').map((e) => e.textContent);
 check(
-  ['?', 'HH', 'AR', 'SK'].every((p) => prosigns.includes(p)),
+  ['?', 'HH', 'AR', 'SK', 'BK'].every((p) => prosigns.includes(p)),
   `按钮上标了过程信号：${JSON.stringify(prosigns)}`,
 );
+// 每个按钮上还画着这个信号的码形，新手照着拍就行
+const miniCounts = document.querySelectorAll('.btn .pattern-mini').map((e) => e.childElementCount);
+check(miniCounts.length === 5, `每个动作都画了码形（${miniCounts.length} 个）`);
+console.log(`[smoke] 按钮上码形的码元数: ${JSON.stringify(miniCounts)}`);
 
 // 真的拍一段报文进去（用 window 级键盘事件当直键）
 const { ALL_CHAR_TO_PATTERN } = await import(`${corePrefix}morse.js`);
@@ -524,12 +528,14 @@ check(correctCells > 0, `有字符被判对（${correctCells} 个 .cell.correct�
 const dists = document.querySelectorAll('.cell').map((c) => c.dataset.dist);
 check(dists.includes('0'), `中心字符带 dist=0 标记：${JSON.stringify(dists)}`);
 
-// 用手键直接操作：发 AR 应当换到下一条
-const itemBefore = document.querySelectorAll('.practice-bar')[0]?.textContent ?? '';
+// 用手键直接操作：发 AR 应当换到下一条。
+// 只比条目号：顶栏里的手速是活的，会随判定变化，不能整行比。
+const itemLabel = () => (document.querySelectorAll('.practice-bar')[0]?.textContent ?? '').match(/第 \d+\/\d+ 条/)?.[0] ?? '';
+const itemBefore = itemLabel();
 keyPattern('.-.-.', dit); // <AR>
 advance(120);
-const itemAfter = document.querySelectorAll('.practice-bar')[0]?.textContent ?? '';
-check(itemBefore !== itemAfter, `发 AR 换到了下一条（${JSON.stringify(itemBefore.slice(-12))} → ${JSON.stringify(itemAfter.slice(-12))}）`);
+const itemAfter = itemLabel();
+check(itemBefore !== itemAfter, `发 AR 换到了下一条（${itemBefore} → ${itemAfter}）`);
 check(
   document.querySelectorAll('.cell.correct').length === 0,
   '换条目之后进度归零（新的引擎）',
@@ -542,10 +548,19 @@ const modal = document.querySelectorAll('.modal')[0];
 check(!!modal, '发 SK 弹出结算');
 if (modal) {
   check(/\d/.test(modal.textContent), `弹窗里有成绩：${JSON.stringify(modal.textContent.slice(0, 60))}`);
-  const closeBtn = modal.querySelectorAll('button').find((b) => b.textContent.includes('关闭'));
+}
+
+// 弹窗开着也能用手键：发 BK 回到上一条，同时把弹窗收掉
+keyPattern('-...-.-', dit); // <BK>
+advance(120);
+const itemPrev = itemLabel();
+check(itemPrev === itemBefore, `发 BK 回到了上一条（${itemPrev}）`);
+check(document.querySelectorAll('.modal').length === 0, '发过程信号时弹窗自动收起');
+
+if (modal) {
+  const closeBtn = document.querySelectorAll('.modal button').find((b) => b.textContent.includes('关闭'));
   closeBtn?.click();
   advance(20);
-  check(document.querySelectorAll('.modal').length === 0, '弹窗能关闭');
 }
 
 // 鼠标也仍然能用：点「成绩」

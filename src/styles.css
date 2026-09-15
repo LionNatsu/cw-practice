@@ -525,17 +525,18 @@ label.inline {
   width: 0.7em;
 }
 
-/* 底部：四个动作，各带一个过程信号 */
+/* 底部：五个动作，各带过程信号名与它的码形 */
 .practice-foot {
   border-top: 1px solid var(--line);
   padding: 12px 20px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   flex: none;
 }
 
-/* 按钮上的过程信号：告诉用户这个动作也能拍出来 */
+/* 按钮上的过程信号：告诉用户这个动作也能拍出来，以及怎么拍 */
 .btn .prosign {
   font-family: var(--mono);
   font-size: 12px;
@@ -546,6 +547,54 @@ label.inline {
 
 .btn:hover .prosign {
   color: var(--fg);
+}
+
+/* 微缩码形：跟着按钮文字的颜色走，不抢眼 */
+.pattern-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  color: var(--fg-faint);
+}
+
+.pattern-mini .dot,
+.pattern-mini .dash {
+  display: block;
+  height: 4px;
+  background: currentColor;
+}
+
+.pattern-mini .dot {
+  width: 4px;
+}
+
+.pattern-mini .dash {
+  width: 13px;
+}
+
+.btn:hover .pattern-mini,
+.help .pattern-mini {
+  color: var(--fg-dim);
+}
+
+/* 说明页里的码形大一点 */
+.help .pattern-mini {
+  gap: 4px;
+  margin-left: 10px;
+}
+
+.help .pattern-mini .dot,
+.help .pattern-mini .dash {
+  height: 6px;
+}
+
+.help .pattern-mini .dot {
+  width: 6px;
+}
+
+.help .pattern-mini .dash {
+  width: 20px;
 }
 
 /* 该干下一步了（整条发完时） */
@@ -893,6 +942,31 @@ table.grid td.num {
   line-height: 1.8;
   font-size: 13px;
   color: var(--fg-dim);
+}
+
+/* 一行过程信号：名字 + 码形 + 用途 */
+.help .cmd-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 24px;
+  margin: 12px 0 6px;
+}
+
+.help .cmd {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.help .cmd b {
+  font-family: var(--mono);
+  color: var(--fg);
+  min-width: 2.2em;
+}
+
+.help .cmd .what {
+  margin-left: 14px;
 }
 
 .help code {

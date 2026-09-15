@@ -16,12 +16,12 @@
  */
 
 import type { App } from '../App.ts';
-import type { CommandId, PracticeEngine, PracticeState } from '../core/practice.ts';
+import { COMMAND_INFO, type CommandId, type PracticeEngine, type PracticeState } from '../core/practice.ts';
 import { mergeScore } from '../core/settings.ts';
 import type { SessionScore } from '../core/types.ts';
 import type { KeyEdge } from './input.ts';
 import { KeyInput } from './input.ts';
-import { clear, fmtMs, h, toast } from './dom.ts';
+import { clear, fmtMs, h, patternMini, toast } from './dom.ts';
 
 /** 透镜范围：中心两侧各显示几个字。 */
 const WINDOW = 7;
@@ -42,6 +42,7 @@ export class PracticeView {
   private liveDot!: HTMLElement;
   private statWpm!: HTMLElement;
   private statProgress!: HTMLElement;
+  private itemEl!: HTMLElement;
   private nextBtn: HTMLButtonElement | null = null;
 
   /** 按 Esc 可以把手键放下（暂停时既不响也不判）。 */
@@ -63,6 +64,7 @@ export class PracticeView {
     this.liveDot = h('span', { class: 'live-dot on', id: 'live-dot' });
     this.statWpm = h('b', {}, '--');
     this.statProgress = h('b', {}, `0/${this.engine.target.length}`);
+    this.itemEl = h('span', { id: 'item-label' }, `第 ${this.app.itemIndex + 1}/${this.app.items.length} 条`);
 
     const bar = h(
       'div',
@@ -70,7 +72,7 @@ export class PracticeView {
       this.liveDot,
       h('span', { class: 'lesson' }, this.app.lesson.title),
       h('span', { class: 'sep' }, '·'),
-      h('span', {}, `第 ${this.app.itemIndex + 1}/${this.app.items.length} 条`),
+      this.itemEl,
       h('div', { class: 'spacer' }),
       h('span', {}, '手速 '),
       this.statWpm,
@@ -92,10 +94,7 @@ export class PracticeView {
     const foot = h(
       'div',
       { class: 'practice-foot' },
-      this.action('replay', '重听', '?', '重新播一遍这条的示范'),
-      this.action('retry', '重来', 'HH', '本条从头再来'),
-      this.action('next', '下一条', 'AR', '结束本条，换下一条'),
-      this.action('score', '成绩', 'SK', '结算这条的成绩'),
+      ...(['prev', 'replay', 'retry', 'next', 'score'] as CommandId[]).map((id) => this.action(id)),
     );
 
     root.appendChild(h('div', { class: 'practice', id: 'practice' }, bar, this.stageEl, under, foot));
@@ -124,6 +123,10 @@ export class PracticeView {
         }
         if (ev.code === 'KeyN') {
           this.nextItem();
+          return true;
+        }
+        if (ev.code === 'KeyP') {
+          this.prevItem();
           return true;
         }
         return false;
@@ -204,7 +207,17 @@ export class PracticeView {
   }
 
   private nextItem(): void {
-    const next = (this.app.itemIndex + 1) % this.app.items.length;
+    this.gotoItem(this.app.itemIndex + 1);
+  }
+
+  private prevItem(): void {
+    this.gotoItem(this.app.itemIndex - 1);
+  }
+
+  /** 换条目：越界就绕回去。 */
+  private gotoItem(index: number): void {
+    const total = this.app.items.length;
+    const next = ((index % total) + total) % total;
     this.app.itemIndex = next;
     this.app.saveSettings({ lastItemIndex: next });
     this.restartItem();
@@ -231,9 +244,11 @@ export class PracticeView {
     showResult(this.app, score);
   }
 
-  /** 底部动作：点得到，也拍得到（过程信号）。 */
-  private action(id: CommandId, label: string, prosign: string, title: string): HTMLButtonElement {
+  /** 底部动作：点得到，也拍得到（过程信号）。名字与码形都画在按钮上。 */
+  private action(id: CommandId): HTMLButtonElement {
+    const info = COMMAND_INFO[id];
     const run: Record<CommandId, () => void> = {
+      prev: () => this.prevItem(),
       next: () => this.nextItem(),
       retry: () => this.restartItem(),
       replay: () => void this.replayReference(),
@@ -241,9 +256,15 @@ export class PracticeView {
     };
     const btn = h(
       'button',
-      { class: 'btn', id: `action-${id}`, title, onclick: () => run[id]() },
-      label,
-      h('span', { class: 'prosign' }, prosign),
+      {
+        class: 'btn',
+        id: `action-${id}`,
+        title: `${info.label}　${info.name}　${info.pattern}`,
+        onclick: () => run[id](),
+      },
+      info.label,
+      h('span', { class: 'prosign' }, info.name),
+      patternMini(info.pattern),
     );
     if (id === 'next') this.nextBtn = btn;
     return btn;
@@ -278,6 +299,7 @@ export class PracticeView {
     this.renderMessage(st);
     this.statWpm.textContent = st.wpm.toFixed(0);
     this.statProgress.textContent = `${st.cursor}/${st.target.length}`;
+    this.itemEl.textContent = `第 ${this.app.itemIndex + 1}/${this.app.items.length} 条`;
     // 整条发完了，把“下一条”提一下，告诉人接下来该干什么
     this.nextBtn?.classList.toggle('attention', st.finished);
 
@@ -299,6 +321,7 @@ export class PracticeView {
   private runCommand(id: CommandId): void {
     this.closeModal();
     if (id === 'next') this.nextItem();
+    else if (id === 'prev') this.prevItem();
     else if (id === 'retry') this.restartItem();
     else if (id === 'replay') void this.replayReference();
     else this.finish();

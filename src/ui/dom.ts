@@ -57,12 +57,10 @@ export function qs<T extends Element = HTMLElement>(sel: string, root: ParentNod
   return el;
 }
 
-/** 把码形渲染成点划块。 */
-export function morseBlocks(pattern: string): HTMLElement {
-  const wrap = h('span', { class: 'pattern' });
-  for (const c of pattern) {
-    wrap.appendChild(h('i', { class: c === '.' ? 'dot' : 'dash' }, c === '.' ? '' : ''));
-  }
+/** 把码形画成一排微缩的点划块：按钮上、说明页里都用它告诉人怎么拍。 */
+export function patternMini(pattern: string): HTMLElement {
+  const wrap = h('span', { class: 'pattern-mini' });
+  for (const c of pattern) wrap.appendChild(h('i', { class: c === '.' ? 'dot' : 'dash' }));
   return wrap;
 }
 

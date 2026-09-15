@@ -90,25 +90,50 @@ export function classifyDuration(duration: number, unitMs: number): SymbolKind {
 /* ============================ 过程信号 ============================ */
 
 /** 用过程信号直接操作界面：不用退出拍发，也不用摸鼠标。 */
-export type CommandId = 'next' | 'retry' | 'replay' | 'score';
+export type CommandId = 'prev' | 'next' | 'retry' | 'replay' | 'score';
 
 /**
  * 码形 → 命令。
  *
  * 都是业余无线电里真的有人这么用的过程信号：
- *   <AR> .-.-.   报文结束     → 下一条
- *   <SK> ...-.-  结束联络     → 结算成绩
- *   ?    ..--..  请重发       → 重听示范
- *   <HH> ........ 发错了      → 本条重来（8 个点，不是任何字符的码形）
+ *   <AR> .-.-.     报文结束     → 下一条
+ *   <BK> -...-.-   打断/回到前面 → 上一条
+ *   <HH> ........  发错了       → 本条重来（8 个点，不是任何字符的码形）
+ *   ?    ..--..    请重发       → 重听示范
+ *   <SK> ...-.-    结束联络     → 结算成绩
  *
  * 目标字优先：课上正好在练 ? 时，它就是目标字，不是命令。
  */
 export const COMMANDS: Readonly<Record<string, CommandId>> = {
   '.-.-.': 'next',
+  '-...-.-': 'prev',
   '...-.-': 'score',
   '..--..': 'replay',
   '........': 'retry',
 };
+
+/** 每个命令的名字与码形，界面拿它写提示。 */
+export const COMMAND_INFO: Readonly<Record<CommandId, { name: string; pattern: string; label: string }>> = {
+  prev: { name: 'BK', pattern: '-...-.-', label: '上一条' },
+  next: { name: 'AR', pattern: '.-.-.', label: '下一条' },
+  retry: { name: 'HH', pattern: '........', label: '本条重来' },
+  replay: { name: '?', pattern: '..--..', label: '重听示范' },
+  score: { name: 'SK', pattern: '...-.-', label: '结算成绩' },
+};
+
+/**
+ * 这个码形还能继续长成某个过程信号吗。
+ *
+ * 用来解决一个真实的撞车：目标是 E（一个点），用户却想发 AR（.-.-.）。
+ * 第一个点既是目标的全部，也是 AR 的开头 —— 这时候不能急着收下，
+ * 等停顿再说：停下来了就是 E，接着往下发就是 AR。
+ */
+function canGrowIntoCommand(pattern: string): boolean {
+  for (const cmd of Object.keys(COMMANDS)) {
+    if (cmd.length > pattern.length && cmd.startsWith(pattern)) return true;
+  }
+  return false;
+}
 
 /** 一个候选单位假设的代价，以及它读出来的码形。 */
 interface Hypothesis {
@@ -370,8 +395,15 @@ export class PracticeEngine {
    * 用最宽松的那个说得通的假设来算：只按了一两下时点划还分不清，
    * 一个 540ms 的按键既可能是慢的点、也可能是快的划，这时急着断字，
    * 就会把还在拼的字判成拍错。
+   *
+   * 例外：已经读成目标字、只是在等“你会不会接着发成过程信号”时，
+   * 就没有可犹豫的了，按最紧凑的门槛算，别拖。
    */
   get settleMs(): number {
+    const reading = this.attempt.length ? this.read() : null;
+    if (reading && reading.single && reading.text !== undefined && reading.text === this.expected?.ch) {
+      return reading.unitMs * THRESHOLDS.symbolGapMax;
+    }
     return settleUnitFor(this.attempt, this.unit, this.expected?.pattern) * THRESHOLDS.symbolGapMax;
   }
 
@@ -404,7 +436,7 @@ export class PracticeEngine {
     this.confused = null;
 
     // 这一下正好把这个字发全了（或者发出一个过程信号），立刻办，不用再等停顿
-    this.resolveIfComplete();
+    this.resolveIfComplete(false);
   }
 
   /**
@@ -450,14 +482,16 @@ export class PracticeEngine {
    * 这次尝试已经读成了一个完整的字，就当场办掉：收下目标字，或者执行过程信号。
    *
    * 码形与字是一一对应的，读出来等于目标，就说明这个字已经完整，
-   * 不必再等停顿 —— 手感是跟手的。
+   * 不必再等停顿 —— 手感是跟手的。唯一的例外见 canGrowIntoCommand：
+   * 目标字同时还是某个过程信号的开头时，等停顿再定，免得把 AR 拆成 E + C。
    */
-  private resolveIfComplete(): boolean {
+  private resolveIfComplete(settled: boolean): boolean {
     const reading = this.read();
     if (!reading.single || reading.kinds.length > THRESHOLDS.maxSymbols) return false;
 
     const want = this.expected?.ch;
     if (want !== undefined && reading.text === want) {
+      if (!settled && canGrowIntoCommand(reading.pattern)) return false;
       this.learn(reading);
       this.clearAttempt();
       this.accept();
@@ -475,7 +509,7 @@ export class PracticeEngine {
 
   /** 判一个停顿：先看是不是完整的字，不是就按拍错处理。 */
   private judge(): void {
-    if (this.resolveIfComplete()) return;
+    if (this.resolveIfComplete(true)) return;
 
     const reading = this.read();
     const want = this.expected?.ch;

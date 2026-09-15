@@ -430,7 +430,12 @@ async function main() {
     );
     check(errs.length === 0, `无 JS 报错`, errs.map((e) => e.params?.exceptionDetails?.text ?? '').join(' | '));
 
-    // 1) 首次访问落在帮助页
+    // 1) 说明页：列出四个过程信号，各带码形
+    await click(byText('.tab', '帮助'));
+    await delay(400);
+    const helpCmds = await cdp.evaluate(`document.querySelectorAll('.help .cmd').length`);
+    const helpMinis = await cdp.evaluate(`document.querySelectorAll('.help .pattern-mini').length`);
+    check(helpCmds === 5 && helpMinis === 5, `说明页列了 5 条过程信号并画出码形（${helpCmds}/${helpMinis}）`);
     await shot('01-help');
 
     // 2) 练习页（未开始）
@@ -630,16 +635,26 @@ async function main() {
     check(ls.gap, '报文里能看出分词断句（词之间有空格）');
 
     // 7b) 全程用手键操作：发 AR（.-.-.）应当换到下一条，不用摸鼠标
-    const itemBefore = await cdp.evaluate(`document.querySelector('.practice-bar')?.innerText.replace(/\\n/g,' ') ?? ''`);
+    const itemBefore = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);
     for (const sym of '.-.-.') {
       await keyer.press(sym === '.' ? 110 : 330);
       await delay(110);
     }
     await delay(900);
-    const itemAfter = await cdp.evaluate(`document.querySelector('.practice-bar')?.innerText.replace(/\\n/g,' ') ?? ''`);
-    console.log(`[screenshot] 发 AR: ${JSON.stringify(itemBefore.slice(-14))} → ${JSON.stringify(itemAfter.slice(-14))}`);
+    const itemAfter = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);
+    console.log(`[screenshot] 发 AR: ${JSON.stringify(itemBefore)} → ${JSON.stringify(itemAfter)}`);
     check(itemBefore !== itemAfter, '发 AR 直接换到下一条（全程不用鼠标）');
     await shot('08b-prosign-next');
+
+    // 7c) 再发 BK（-...-.-）回到上一条
+    for (const sym of '-...-.-') {
+      await keyer.press(sym === '.' ? 110 : 330);
+      await delay(110);
+    }
+    await delay(900);
+    const itemBack = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);
+    console.log(`[screenshot] 发 BK: ${JSON.stringify(itemAfter)} → ${JSON.stringify(itemBack)}`);
+    check(itemBack === itemBefore, '发 BK 直接回到上一条');
 
     // 8) 设置页（校准台）
     await click(byText('.tab', '设置'));
