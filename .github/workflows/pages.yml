@@ -35,6 +35,8 @@ jobs:
         run: node scripts/build.mjs
       - name: 冒烟测试（最小 DOM 桩，真跑一遍构建产物）
         run: node tests/dom-smoke.mjs dist
+      - name: 音频测试（离线渲染波形，防止整段变成长音）
+        run: node tests/audio-check.mjs dist
       - name: 产物自检（防止再发出白屏站点）
         run: node scripts/verify-dist.mjs
       - uses: actions/configure-pages@v5

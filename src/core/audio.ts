@@ -96,11 +96,15 @@ export class MorseAudio {
   /**
    * 参考发送一段文本（标准节奏），返回总时长 ms。
    * 播放途中调用 stopPlayback() 可以打断。
+   *
+   * 单位约定：内部一律用**秒**（Web Audio 的时间轴就是秒）。
+   * 这里曾经踩过一个坑：把毫秒长度直接传给了包络函数，于是 100ms 的点
+   * 被安排成 100 秒，听起来就是一整段长音。改动时务必保持单位一致。
    */
   async playText(text: string, wpm: number, opts: { toneHz?: number; onEnd?: () => void } = {}): Promise<number> {
     await this.resume();
     const ctx = this.ctx!;
-    const dit = 1200 / Math.max(wpm, 1);
+    const dit = 1200 / Math.max(wpm, 1) / 1000; // 单位时长（秒）
     const tone = opts.toneHz ?? this.opts.toneHz;
     const start = ctx.currentTime + 0.08;
 
@@ -113,23 +117,22 @@ export class MorseAudio {
     playOsc.connect(playGain).connect(this.master!);
 
     let t = start;
-    let total = 0;
     const words = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
     for (let w = 0; w < words.length; w++) {
       const chars = [...words[w]!];
       for (let i = 0; i < chars.length; i++) {
         const pat = ALL_CHAR_TO_PATTERN[chars[i]!];
         if (!pat) continue;
-        for (const sym of pat) {
-          const len = (sym === '.' ? 1 : 3) * dit;
-          scheduleTone(playGain.gain, t, len, 0.006);
-          t += len + dit;
+        for (let s = 0; s < pat.length; s++) {
+          const len = (pat[s] === '.' ? 1 : 3) * dit; // 秒
+          scheduleTone(playGain.gain, t, len, TONE_RAMP);
+          t += len + dit; // 码元间隔 1 单位
         }
-        if (i < chars.length - 1) t += 2 * dit; // 字符间隔 3 单位（1 单位已加）
+        if (i < chars.length - 1) t += 2 * dit; // 字符间隔共 3 单位（1 单位已加）
       }
-      if (w < words.length - 1) t += 4 * dit; // 词间 7 单位
+      if (w < words.length - 1) t += 4 * dit; // 词间隔共 7 单位
     }
-    total = (t - start) * 1000;
+    const total = (t - start) * 1000;
     playOsc.start(start);
     playOsc.stop(t + 0.05);
     this.playback = { osc: playOsc, gain: playGain };
@@ -173,10 +176,15 @@ export class MorseAudio {
   }
 }
 
+/** 侧音的淡入淡出时长（秒），避免起停时的“咔哒”声。 */
+const TONE_RAMP = 0.006;
+
+/** 给一个音排好包络：起、保持、落。时间单位一律是秒。 */
 function scheduleTone(param: AudioParam, at: number, lenSec: number, ramp: number): void {
+  const holdUntil = at + Math.max(ramp, lenSec - ramp);
   param.setValueAtTime(0.0001, at);
   param.linearRampToValueAtTime(1, at + ramp);
-  param.setValueAtTime(1, at + Math.max(ramp, lenSec - ramp));
+  param.setValueAtTime(1, holdUntil);
   param.linearRampToValueAtTime(0.0001, at + lenSec);
 }
 
