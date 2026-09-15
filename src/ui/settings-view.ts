@@ -90,7 +90,7 @@ export class SettingsView {
           h(
             'label',
             { class: 'field' },
-            '你的呼号（会出现在 CQ / DE 报文里）',
+            '你的呼号（会用在 CQ、DE 这些呼号里）',
             h('input', {
               type: 'text',
               value: s.callsign,
@@ -98,14 +98,14 @@ export class SettingsView {
               oninput: (e: Event) => this.app.saveSettings({ callsign: (e.target as HTMLInputElement).value.toUpperCase() }),
             }),
           ),
-          num('起始速度 WPM', s.wpm, 4, 40, 1, (v) => this.app.saveSettings({ wpm: v }), '12 大约 = 每个点 100ms'),
-          check('锁定速度（不让模型跟着你漂移）', s.speedLocked, (v) => this.app.saveSettings({ speedLocked: v }), '想严格练固定节奏时打开'),
+          num('起始速度 WPM', s.wpm, 4, 40, 1, (v) => this.app.saveSettings({ wpm: v }), '12 大约是每个点 100ms'),
+          check('锁定速度', s.speedLocked, (v) => this.app.saveSettings({ speedLocked: v }), '想严格按固定节奏练时打开'),
         ),
         h(
           'p',
           { class: 'dim', style: { fontSize: '12px' } },
-          '速度只作为起始先验：默认会自适应你的真实点长，所以手快手慢都不用改这里。',
-          '锁定后模型不再漂移，只统计节奏稳定度——适合"我要练到 15 WPM"这种目标。',
+          '这个速度只是个起点：程序会自己摸清你的点有多长，所以手快手慢都不用改它。',
+          '勾上“锁定速度”之后就不再跟着你变，只记录你的节奏稳不稳 —— 想练“稳定到 15 WPM”时用。',
         ),
       ),
     );
@@ -120,7 +120,7 @@ export class SettingsView {
           { class: 'row' },
           num('侧音频率 Hz', s.toneHz, 300, 1200, 10, (v) => this.app.saveSettings({ toneHz: v })),
           num('音量 %', Math.round(s.volume * 100), 0, 100, 5, (v) => this.app.saveSettings({ volume: v / 100 })),
-          check('开启侧音', s.sidetone, (v) => this.app.saveSettings({ sidetone: v })),
+          check('按下时出声（侧音）', s.sidetone, (v) => this.app.saveSettings({ sidetone: v })),
           h(
             'button',
             {
@@ -130,7 +130,7 @@ export class SettingsView {
                 await this.app.audio.playText('PARIS', this.app.settings.wpm);
               },
             },
-            '试听（PARIS）',
+            '听一下（PARIS）',
           ),
         ),
       ),
@@ -140,26 +140,26 @@ export class SettingsView {
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, '输入方式'),
+        h('h2', {}, '用什么当手键'),
         h(
           'div',
           { class: 'row' },
-          check('鼠标左键 = 直键（HID 直键练习器）', s.allowMouseLeft, (v) => this.app.saveSettings({ allowMouseLeft: v })),
-          check('鼠标右键也能当直键', s.allowRightButton, (v) => this.app.saveSettings({ allowRightButton: v })),
-          check('键盘（空格 / J / K / 回车）也能当直键', s.allowKeyboard, (v) => this.app.saveSettings({ allowKeyboard: v })),
+          check('鼠标左键（HID 直键练习器）', s.allowMouseLeft, (v) => this.app.saveSettings({ allowMouseLeft: v })),
+          check('鼠标右键', s.allowRightButton, (v) => this.app.saveSettings({ allowRightButton: v })),
+          check('键盘的空格 / J / K / 回车', s.allowKeyboard, (v) => this.app.saveSettings({ allowKeyboard: v })),
         ),
         h(
           'div',
           { class: 'row', style: { marginTop: '10px' } },
-          slider('停顿判定', s.pauseUnits, 2.5, 6, 0.1, (v) => this.app.saveSettings({ pauseUnits: v }), (v) => `${v.toFixed(1)} 个单位`),
-          slider('新手宽容度', s.tolerance, 0, 1, 0.05, (v) => this.app.saveSettings({ tolerance: v }), (v) => `${(v * 100).toFixed(0)}%`),
-          check('随机顺序练习本课条目', s.shuffle, (v) => this.app.saveSettings({ shuffle: v })),
+          slider('多久算一个字发完', s.pauseUnits, 2.5, 6, 0.1, (v) => this.app.saveSettings({ pauseUnits: v }), (v) => `${v.toFixed(1)} 个单位`),
+          slider('对新手宽容一点', s.tolerance, 0, 1, 0.05, (v) => this.app.saveSettings({ tolerance: v }), (v) => `${(v * 100).toFixed(0)}%`),
+          check('打乱本课的顺序', s.shuffle, (v) => this.app.saveSettings({ shuffle: v })),
         ),
         h(
           'p',
           { class: 'dim', style: { fontSize: '12px' } },
-          '停顿判定：两次按键之间超过这么多个"单位"时间，就认为是一个新字符（标准是 3 个单位）。',
-          '手慢的新手可以把这里调小一点（比如 3.0），发得干脆的人可以调大。',
+          '“多久算一个字发完”：两次按键之间静了这么长时间，就认为上一个字发完了（标准是 3 个单位）。',
+          '发得慢的话可以调到 3.0 左右；发得干脆的可以调大一点。',
         ),
       ),
     );
@@ -173,8 +173,8 @@ export class SettingsView {
       h(
         'div',
         { class: 'hint' },
-        h('div', {}, '校准台：在这里连拍几十个点 / 划，看看识别是否稳定。'),
-        h('div', {}, '这是只读的统计，不会记进课程成绩。'),
+        h('div', {}, '在这里连拍几十下，看看程序把你的点划摸得准不准。'),
+        h('div', {}, '只统计、不记成绩，放心乱拍。'),
       ),
     );
     root.appendChild(
@@ -202,15 +202,16 @@ export class SettingsView {
     const render = () => {
       const st = this.model.stats;
       clear(this.statsEl);
-      this.statsEl.appendChild(meter('点长 dit', `${st.dit.toFixed(0)}ms`, `n=${st.nDit}`));
-      this.statsEl.appendChild(meter('划长 dah', `${st.dah.toFixed(0)}ms`, `n=${st.nDah}`));
-      this.statsEl.appendChild(meter('隐含速度', `${st.wpm.toFixed(1)} WPM`, ''));
-      this.statsEl.appendChild(meter('节奏稳定度', `${st.rhythmScore}/100`, `σ=${(st.cvDit * 100).toFixed(0)}%`));
-      this.statsEl.appendChild(meter('码元误判概率', `${(st.perSymbolError * 100).toFixed(1)}%`, '越低越稳'));
+      this.statsEl.appendChild(meter('点有多长', `${st.dit.toFixed(0)}ms`, `量了 ${st.nDit} 下`));
+      this.statsEl.appendChild(meter('划有多长', `${st.dah.toFixed(0)}ms`, `量了 ${st.nDah} 下`));
+      this.statsEl.appendChild(meter('换算成速度', `${st.wpm.toFixed(1)} WPM`, ''));
+      this.statsEl.appendChild(meter('节奏稳不稳', `${st.rhythmScore}/100`, `忽长忽短 ${(st.cvDit * 100).toFixed(0)}%`));
+      this.statsEl.appendChild(meter('可能听错的比例', `${(st.perSymbolError * 100).toFixed(1)}%`, '越低越稳'));
     };
     render();
 
     this.input = new KeyInput(pad, {
+      debounceMs: 18,
       allowMouseLeft: true,
       allowRightButton: true,
       allowKeyboard: true,
@@ -218,7 +219,7 @@ export class SettingsView {
       onUp: (edge) => {
         this.app.audio.keyUp();
         if (edge.ignored) {
-          toast(`忽略了一次 ${Math.round(edge.duration)}ms 的按下：${edge.ignoreReason}`, 'warn');
+          toast(`${Math.round(edge.duration)}ms 这一下没算：${edge.ignoreReason}`, 'warn');
           return;
         }
         const gap = lastUp === null ? null : edge.down - lastUp;
@@ -242,10 +243,10 @@ export class SettingsView {
         'div',
         { class: 'dline head' },
         h('span', {}, '#'),
-        h('span', {}, '时长'),
-        h('span', {}, '判定'),
-        h('span', {}, '间隔'),
-        h('span', {}, '置信'),
+        h('span', {}, '按下多久'),
+        h('span', {}, '当成'),
+        h('span', {}, '离上一下'),
+        h('span', {}, '把握'),
       ),
     );
     log
@@ -259,7 +260,7 @@ export class SettingsView {
             h('span', {}, String(log.length - i)),
             h('span', {}, `${Math.round(l.dur)}ms`),
             h('span', { class: l.kind }, l.kind === 'dit' ? '点' : '划'),
-            h('span', {}, l.gap === null ? '—' : `${(l.gap / unit).toFixed(1)}u`),
+            h('span', {}, l.gap === null ? '—' : `${(l.gap / unit).toFixed(1)} 个单位`),
             h('span', {}, `${(l.conf * 100).toFixed(0)}%`),
           ),
         );

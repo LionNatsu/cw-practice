@@ -1,13 +1,13 @@
 /**
- * 练习视图：逐字练习的主界面。
+ * 练习页。
  *
- * 布局（自上而下）：
- *  1) 键盘区（把鼠标当手键用；可解除武装以免误触）
- *  2) 当前条目的中文含义 / 提示
- *  3) 目标文本：每个字上面显示它的摩尔斯码，发对了变绿、发错了变红
- *  4) 抄收区：你实际发出来的内容 + 当前未定稿的候选
- *  5) 实时指标：速度、节奏、点长、准确率、置信度
- *  6) 诊断面板（可选）：每一次按下的毫秒数、判成点还是划、间隔是多少单位
+ * 从上到下依次是：
+ *  1) 手键区（鼠标也能当手键；不拍发时按键不进练习，免得误点乱发）
+ *  2) 这一条的中文意思和小提示
+ *  3) 要发的字：每个字上面画着它该怎么发，发对了变绿、发错了变红
+ *  4) 你发出来的内容：已经认出来的用实心字，还没定的用斜体
+ *  5) 当前状态：手速、正确率、节奏、点长划长、这一下的把握
+ *  6) 按键记录：每一下按了多久、被当成点还是划、跟上一下隔了多久
  */
 
 import type { App } from '../App.ts';
@@ -34,9 +34,11 @@ export class PracticeView {
   private candEl!: HTMLElement;
   private pulseEl!: HTMLElement;
   private diagEl!: HTMLElement;
-  private armedEl!: HTMLElement;
+  /** 拍发状态指示灯（“正在拍发 / 未开始”）。 */
+  private liveEl!: HTMLElement;
   private meterEls: Record<string, HTMLElement> = {};
-  private armed = false;
+  /** 是否正在拍发：只有拍发状态下按键才计入练习。 */
+  private live = false;
   private lastSymbolCount = 0;
   private unsub: Array<() => void> = [];
   private finished = false;
@@ -56,11 +58,11 @@ export class PracticeView {
       h(
         'div',
         { class: 'hint' },
-        h('div', {}, '把鼠标移到这个区域，点一下「武装手键」，然后像拍直键一样点击。'),
+        h('div', {}, '拍的时候鼠标停在这块区域里就行。按一下空格（或点「开始拍发」）就能开始。'),
         h(
           'div',
           {},
-          '快捷键：',
+          '没有手键也能练：鼠标左键、右键，或者键盘的 ',
           h('kbd', {}, '空格'),
           ' / ',
           h('kbd', {}, 'J'),
@@ -68,31 +70,31 @@ export class PracticeView {
           h('kbd', {}, 'K'),
           ' / ',
           h('kbd', {}, '回车'),
-          ' 也可以当直键　·　',
+          '　·　',
           h('kbd', {}, 'Esc'),
-          ' 武装 / 解除　·　',
+          ' 开始或停下　·　',
           h('kbd', {}, 'R'),
-          ' 听参考发送　·　',
+          ' 听一遍示范　·　',
           h('kbd', {}, 'N'),
-          ' 下一条',
+          ' 换下一条',
         ),
       ),
     );
 
-    this.armedEl = h('span', { class: 'armed-indicator off' }, h('i', { class: 'lamp' }), '未武装');
+    this.liveEl = h('span', { class: 'armed-indicator off' }, h('i', { class: 'lamp' }), '未开始');
 
     const toolbar = h(
       'div',
       { class: 'row', style: { marginBottom: '10px' } },
-      this.armedEl,
-      // 给一个稳定的 id：自动化测试（tests/screenshot.mjs）靠它精确点击，
-      // 而不是靠"按钮文字里包含武装"——那种匹配在状态切换的瞬间会点到别的按钮。
-      h('button', { class: 'btn primary', id: 'arm-toggle', onclick: () => this.toggleArm() }, '武装手键'),
-      h('button', { class: 'btn', onclick: () => this.replayReference() }, '听参考发送（R）'),
+      this.liveEl,
+      // 固定 id：自动化测试（tests/screenshot.mjs）靠它精确点击，
+      // 而不是靠按钮文字——文字会随状态变，靠文字匹配会点错按钮。
+      h('button', { class: 'btn primary', id: 'arm-toggle', onclick: () => this.toggleLive() }, '开始拍发'),
+      h('button', { class: 'btn', onclick: () => this.replayReference() }, '听一遍示范（R）'),
       h('div', { class: 'spacer' }),
-      h('button', { class: 'btn', onclick: () => this.restartItem() }, '重做本条目'),
+      h('button', { class: 'btn', onclick: () => this.restartItem() }, '重拍这一条'),
       h('button', { class: 'btn', onclick: () => this.nextItem() }, '下一条（N）'),
-      h('button', { class: 'btn ghost', onclick: () => this.finish() }, '结算'),
+      h('button', { class: 'btn ghost', onclick: () => this.finish() }, '看看成绩'),
     );
 
     this.glossEl = h('div', { class: 'gloss' });
@@ -103,12 +105,12 @@ export class PracticeView {
 
     const meters = h('div', { class: 'timing-row' });
     for (const [key, label] of [
-      ['wpm', '当前速度'],
-      ['accuracy', '字符准确率'],
-      ['rhythm', '节奏稳定度'],
-      ['dit', '点长 (dit)'],
-      ['dah', '划长 (dah)'],
-      ['conf', '最近码元置信度'],
+      ['wpm', '现在的手速'],
+      ['accuracy', '正确率'],
+      ['rhythm', '节奏稳不稳'],
+      ['dit', '点有多长'],
+      ['dah', '划有多长'],
+      ['conf', '这一下的把握'],
     ] as const) {
       const v = h('div', { class: 'v' }, '--');
       this.meterEls[key] = v;
@@ -122,7 +124,7 @@ export class PracticeView {
       { class: 'status-strip' },
       h('span', { class: 'pill' }, `${this.app.lesson.title}`),
       h('span', { class: 'pill' }, `第 ${this.app.itemIndex + 1} / ${this.app.items.length} 条`),
-      h('span', { class: 'pill' }, `起始 ${this.app.settings.wpm} WPM`),
+      h('span', { class: 'pill' }, `按 ${this.app.settings.wpm} WPM 起算`),
       h('span', { class: 'pill' }, `呼号 ${this.app.settings.callsign}`),
     );
 
@@ -130,25 +132,20 @@ export class PracticeView {
     root.appendChild(this.keypadEl);
     root.appendChild(toolbar);
     root.appendChild(this.glossEl);
-    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '目标报文 · 逐字提示'), this.targetEl));
+    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '这一条要发的字'), this.targetEl));
     root.appendChild(
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, '抄收区 · 你实际发出来的内容'),
+        h('h2', {}, '你发出来的内容'),
         this.copyEl,
         this.candEl,
         h('div', { class: 'row', style: { marginTop: '10px' } }, this.pulseEl),
       ),
     );
-    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '实时指标'), meters));
+    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '当前状态'), meters));
     root.appendChild(
-      h(
-        'div',
-        { class: 'card' },
-        h('h2', {}, '按键诊断（每一次按下的毫秒数 / 判定）'),
-        this.diagEl,
-      ),
+      h('div', { class: 'card' }, h('h2', {}, '按键记录（每一下按了多久、被当成什么）'), this.diagEl),
     );
 
     this.syncGloss(item);
@@ -170,10 +167,10 @@ export class PracticeView {
     this.unsub.push(
       this.app.onKey((ev) => {
         if (ev.code === 'Escape') {
-          this.toggleArm();
+          this.toggleLive();
           return true;
         }
-        if (ev.code === 'KeyR' && !this.armed) {
+        if (ev.code === 'KeyR' && !this.live) {
           this.replayReference();
           return true;
         }
@@ -200,14 +197,17 @@ export class PracticeView {
 
   private attachInput(): void {
     this.input = new KeyInput(this.keypadEl, {
-      debounceMs: 0,
-      adaptiveFilter: true,
+      // 只挡“根本不像按键”的极短脉冲；正常拍发（哪怕点只有 40ms）一律放行。
+      // 自适应抖动判断用「时序模型估出的点长」当基准，
+      // 绝不能用“点划混在一起的中位数”——那会比正常的点还长，会把点全丢掉。
+      debounceMs: 18,
+      baselineMs: () => (this.session.model.stats.nDit >= 8 ? this.session.model.unitMs : 0),
       allowMouseLeft: this.app.settings.allowMouseLeft,
       allowRightButton: this.app.settings.allowRightButton,
       allowKeyboard: this.app.settings.allowKeyboard,
-      isArmed: () => this.armed,
+      isLive: () => this.live,
       onDown: (down) => {
-        if (!this.armed) return;
+        if (!this.live) return;
         this.app.audio.keyDown();
         this.keypadEl.classList.add('keying');
         this.pulseEl.textContent = '…';
@@ -216,9 +216,7 @@ export class PracticeView {
       },
       onUp: (edge) => this.handleEdge(edge),
       onIgnored: (edge) => {
-        if (edge.ignoreReason) {
-          this.addDiagLine(edge, '误触');
-        }
+        if (edge.ignoreReason) this.addDiagLine(edge, edge.ignoreReason);
       },
     });
   }
@@ -226,7 +224,7 @@ export class PracticeView {
   private handleEdge(edge: KeyEdge): void {
     this.app.audio.keyUp();
     this.keypadEl.classList.remove('keying');
-    if (!this.armed) return;
+    if (!this.live) return;
     if (edge.ignored) {
       this.addDiagLine(edge, edge.ignoreReason ?? '已忽略');
       return;
@@ -235,41 +233,41 @@ export class PracticeView {
     this.renderPulseFromSession();
   }
 
-  private toggleArm(): void {
-    this.armed = !this.armed;
-    this.input?.setArmed(this.armed);
-    this.armedEl.className = `armed-indicator ${this.armed ? 'on' : 'off'}`;
-    clear(this.armedEl);
-    this.armedEl.appendChild(h('i', { class: 'lamp' }));
-    this.armedEl.appendChild(document.createTextNode(this.armed ? '手键已武装 · 开始拍发' : '未武装'));
-    this.keypadEl.classList.toggle('armed', this.armed);
+  private toggleLive(): void {
+    this.live = !this.live;
+    this.input?.setLive(this.live);
+    this.liveEl.className = `armed-indicator ${this.live ? 'on' : 'off'}`;
+    clear(this.liveEl);
+    this.liveEl.appendChild(h('i', { class: 'lamp' }));
+    this.liveEl.appendChild(document.createTextNode(this.live ? '正在拍发' : '未开始'));
+    this.keypadEl.classList.toggle('armed', this.live);
     const btn = this.keypadEl.parentElement?.querySelector<HTMLButtonElement>('button.primary');
     if (btn) {
-      btn.textContent = this.armed ? '解除武装' : '武装手键';
-      // 把焦点从按钮上摘掉：否则武装之后按空格拍键，浏览器会拿它去"点击"这个
-      // 仍然有焦点的按钮（空格是按钮的默认激活键），拍到一半就把手键解除了。
+      btn.textContent = this.live ? '停止拍发' : '开始拍发';
+      // 把焦点从按钮上摘掉：空格是按钮的默认激活键，焦点留在按钮上的话，
+      // 拍发时按空格会顺手把按钮“点一下”，很容易把拍发状态弄乱。
       btn.blur();
     }
-    if (this.armed) {
+    if (this.live) {
       void this.app.audio.resume();
       this.session.setPaused(false);
-      toast('已武装：现在点击就是拍发，Esc 可解除', 'good', 1800);
+      toast('可以开始了，按 Esc 随时停下', 'good', 1800);
     } else {
       this.app.audio.silence();
     }
   }
 
   private restartItem(): void {
-    const wasArmed = this.armed;
+    const wasLive = this.live;
     this.session.dispose();
     this.session = this.app.startSession(this.app.itemIndex);
     this.session.onUpdate((snap) => this.queueRender(snap));
     this.lastSymbolCount = 0;
     this.finished = false;
     clear(this.diagEl);
-    if (wasArmed) {
-      this.armed = false;
-      this.toggleArm();
+    if (wasLive) {
+      this.live = false;
+      this.toggleLive();
     }
     this.renderSnapshot(this.session.snapshot());
   }
@@ -286,17 +284,17 @@ export class PracticeView {
     this.finished = false;
     clear(this.diagEl);
     this.syncGloss(this.app.currentItem);
-    if (this.armed) {
-      this.armed = false;
-      this.toggleArm();
+    if (this.live) {
+      this.live = false;
+      this.toggleLive();
     }
     this.renderSnapshot(this.session.snapshot());
-    toast(`第 ${next + 1} 条：${this.app.currentItem.text}`, 'info', 1600);
+    toast(`下一条：${this.app.currentItem.text}`, 'info', 1600);
   }
 
   private async replayReference(): Promise<void> {
     const text = this.app.currentItem.text;
-    toast(`参考发送：${text}`, 'info', 1500);
+    toast(`听一遍：${text}`, 'info', 1500);
     await this.app.audio.playText(text, this.app.settings.wpm);
   }
 
@@ -342,7 +340,7 @@ export class PracticeView {
     clear(this.targetEl);
     const mastered = masteredChars(this.app.progress);
     // 目标下标 → 实际发出的字符。
-    // 注意：还没落账（id === null）的字符在这里画成"待定"，不判对错 ——
+    // 注意：还没落账（id === null）的字符在这里画成“待定”，不判对错 ——
     // 它随时可能被后面的按键改写，过早判错会让新手以为自己发错了。
     const actualByTarget = new Map<number, { actual: string | null; verdict: string; settled: boolean }>();
     let ti = 0;
@@ -400,21 +398,23 @@ export class PracticeView {
 
     clear(this.candEl);
     if (snap.pending.length > 0) {
-      this.candEl.appendChild(document.createTextNode('未落定（还会被后续按键修正）：'));
+      this.candEl.appendChild(document.createTextNode('斜体这几个还没定，后面的按键可能会改：'));
       this.candEl.appendChild(h('b', {}, snap.pending.map((p) => displayChar(p.text)).join('')));
       if (snap.summary.wrong + snap.summary.missing > 0) {
         this.candEl.appendChild(
-          h('span', { class: 'dim' }, `　目前统计：对 ${snap.summary.correct} / 错 ${snap.summary.wrong} / 漏 ${snap.summary.missing}`),
+          h('span', { class: 'dim' }, `　目前：对 ${snap.summary.correct}　错 ${snap.summary.wrong}　漏 ${snap.summary.missing}`),
         );
       }
     } else if (snap.pending.length === 0 && snap.committed.length > 0 && snap.summary.accuracy === 1) {
-      this.candEl.appendChild(h('span', { class: 'good' }, '这一条全对，可以按「结算」看成绩，或按 N 进入下一条。'));
+      this.candEl.appendChild(
+        h('span', { class: 'good' }, '这一条全发对了。可以点「看看成绩」，或按 N 换下一条。'),
+      );
     } else if (snap.revision) {
       this.candEl.appendChild(
         h(
           'span',
           {},
-          `已回改前面第 ${snap.revision.id} 个字符：${displayChar(snap.revision.from)} → ${displayChar(snap.revision.to)}`,
+          `改写过了：前面那个字本来认成 ${displayChar(snap.revision.from)}，现在改成 ${displayChar(snap.revision.to)}`,
         ),
       );
     }
@@ -423,10 +423,14 @@ export class PracticeView {
   private renderMeters(snap: SessionSnapshot): void {
     const t = snap.timing;
     setMeter(this.meterEls['wpm']!, `${t.wpm.toFixed(1)}`, 'WPM');
-    setMeter(this.meterEls['accuracy']!, `${(snap.summary.accuracy * 100).toFixed(0)}%`, `${snap.summary.correct}/${snap.target.length}`);
+    setMeter(
+      this.meterEls['accuracy']!,
+      `${(snap.summary.accuracy * 100).toFixed(0)}%`,
+      `对 ${snap.summary.correct}/${snap.target.length}`,
+    );
     setMeter(this.meterEls['rhythm']!, `${t.rhythmScore}`, '/100');
-    setMeter(this.meterEls['dit']!, fmtMs(t.dit), `n=${t.nDit}`);
-    setMeter(this.meterEls['dah']!, fmtMs(t.dah), `n=${t.nDah}`);
+    setMeter(this.meterEls['dit']!, fmtMs(t.dit), `量了 ${t.nDit} 下`);
+    setMeter(this.meterEls['dah']!, fmtMs(t.dah), `量了 ${t.nDah} 下`);
     const last = snap.lastSymbol;
     if (last) {
       setMeter(this.meterEls['conf']!, `${(last.confidence * 100).toFixed(0)}%`, last.kind === 'dit' ? '点' : '划');
@@ -451,8 +455,8 @@ export class PracticeView {
       h(
         'small',
         {},
-        `${last.kind === 'dit' ? '判为「点」' : '判为「划」'}　置信度 ${(last.confidence * 100).toFixed(0)}%　间隔 ${
-          last.gapUnits === null ? '—' : last.gapUnits.toFixed(1) + ' 单位'
+        `${last.kind === 'dit' ? '这是「点」' : '这是「划」'}　把握 ${(last.confidence * 100).toFixed(0)}%　跟上一下隔了 ${
+          last.gapUnits === null ? '—' : last.gapUnits.toFixed(1) + ' 个单位'
         }`,
       ),
     );
@@ -466,10 +470,10 @@ export class PracticeView {
           'div',
           { class: 'dline head' },
           h('span', {}, '#'),
-          h('span', {}, '时长'),
-          h('span', {}, '判定'),
-          h('span', {}, '间隔'),
-          h('span', {}, '说明'),
+          h('span', {}, '按下多久'),
+          h('span', {}, '当成'),
+          h('span', {}, '隔了多久'),
+          h('span', {}, '凭什么这么判'),
         ),
       );
     }
@@ -482,11 +486,11 @@ export class PracticeView {
           h('span', {}, String(i + 1)),
           h('span', {}, `${Math.round(s.press.duration)}ms`),
           h('span', { class: s.kind }, s.kind === 'dit' ? '点' : '划'),
-          h('span', {}, s.gapUnits === null ? '—' : `${s.gapUnits.toFixed(1)}u`),
+          h('span', {}, s.gapUnits === null ? '—' : `${s.gapUnits.toFixed(1)} 个单位`),
           h(
             'span',
             { class: 'dim' },
-            `p(点)=${pct(s.costDit)} / p(划)=${pct(s.costDah)}　置信 ${(s.confidence * 100).toFixed(0)}%`,
+            `像点的程度 ${pct(s.costDit)}、像划的程度 ${pct(s.costDah)}　把握 ${(s.confidence * 100).toFixed(0)}%`,
           ),
         ),
       );
@@ -503,7 +507,7 @@ export class PracticeView {
         { class: 'dline' },
         h('span', {}, '×'),
         h('span', {}, `${Math.round(edge.duration)}ms`),
-        h('span', { class: 'warn' }, '忽略'),
+        h('span', { class: 'warn' }, '没算'),
         h('span', {}, '—'),
         h('span', { class: 'warn' }, reason),
       ),
@@ -529,8 +533,8 @@ function pct(cost: number): string {
 }
 
 /**
- * 结算弹窗：字符准确率、逐字差异、节奏评分、易错对，
- * 以及一次“全局复核”的结果（把前面判断错的字修回来）。
+ * 成绩单：逐字对错、节奏评分、最容易发错的字，
+ * 外加一次“把整段重新解一遍”的结果（把在线时判错的字修回来）。
  */
 function showResult(
   app: App,
@@ -540,7 +544,7 @@ function showResult(
   const root = document.getElementById('modal-root');
   if (!root) return;
   const accuracy = score.accuracy;
-  const grade = accuracy >= 0.98 ? '完美' : accuracy >= 0.9 ? '很好' : accuracy >= 0.75 ? '还行' : '再练练';
+  const grade = accuracy >= 0.98 ? '全对' : accuracy >= 0.9 ? '不错' : accuracy >= 0.75 ? '还得练' : '慢慢来';
   const gradeClass = accuracy >= 0.9 ? 'good' : accuracy >= 0.75 ? 'warn' : 'bad';
 
   const diff = h('div', { class: 'diff-line' });
@@ -557,52 +561,69 @@ function showResult(
     h(
       'div',
       { class: 'modal' },
-      h('h2', {}, `${app.lesson.title} · 第 ${app.itemIndex + 1} 条结算`),
-      h('div', { class: 'row' }, h('div', { class: `big-score ${gradeClass}` }, `${(accuracy * 100).toFixed(1)}%`), h('div', { class: 'dim' }, grade)),
-      h('div', { class: 'row dim', style: { fontSize: '12px', gap: '16px' } },
-        h('span', {}, `对 ${score.correct}`),
-        h('span', {}, `错 ${score.wrong}`),
-        h('span', {}, `漏 ${score.missing}`),
-        h('span', {}, `多 ${score.extra}`),
-        h('span', {}, `按键 ${score.pressCount}`),
-        h('span', {}, `用时 ${(score.elapsed / 1000).toFixed(1)}s`),
+      h('h2', {}, `${app.lesson.title} · 第 ${app.itemIndex + 1} 条的成绩`),
+      h(
+        'div',
+        { class: 'row' },
+        h('div', { class: `big-score ${gradeClass}` }, `${(accuracy * 100).toFixed(1)}%`),
+        h('div', { class: 'dim' }, grade),
       ),
-      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '逐字差异（绿=对，红=错，下划线=漏，黄=多）'),
+      h(
+        'div',
+        { class: 'row dim', style: { fontSize: '12px', gap: '16px' } },
+        h('span', {}, `发对 ${score.correct} 个字`),
+        h('span', {}, `发错 ${score.wrong} 个`),
+        h('span', {}, `漏掉 ${score.missing} 个`),
+        h('span', {}, `多发 ${score.extra} 个`),
+        h('span', {}, `一共按了 ${score.pressCount} 下`),
+        h('span', {}, `用了 ${(score.elapsed / 1000).toFixed(1)} 秒`),
+      ),
+      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '逐字对照（绿＝对，红＝发错，下划线＝漏，黄＝多发）'),
       diff,
-      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '节奏与速度'),
-      h('div', { class: 'row', style: { gap: '18px', fontSize: '13px' } },
-        h('span', {}, `点长 ${fmtMs(score.timing.dit)}（±${(score.timing.cvDit * 100).toFixed(0)}%）`),
+      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '节奏和速度'),
+      h(
+        'div',
+        { class: 'row', style: { gap: '18px', fontSize: '13px' } },
+        h('span', {}, `点长 ${fmtMs(score.timing.dit)}（忽长忽短 ±${(score.timing.cvDit * 100).toFixed(0)}%）`),
         h('span', {}, `划长 ${fmtMs(score.timing.dah)}（±${(score.timing.cvDah * 100).toFixed(0)}%）`),
-        h('span', {}, `速度 ${score.timing.wpm.toFixed(1)} WPM`),
-        h('span', { class: score.timing.rhythmScore >= 70 ? 'good' : 'warn' }, `节奏 ${score.timing.rhythmScore}/100`),
+        h('span', {}, `换算成 ${score.timing.wpm.toFixed(1)} WPM`),
+        h('span', { class: score.timing.rhythmScore >= 70 ? 'good' : 'warn' }, `节奏分 ${score.timing.rhythmScore}/100`),
       ),
-      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '全局复核（把整段重新解一遍，可能修正前面判错的字）'),
-      h('div', { class: 'row', style: { fontSize: '14px' } },
-        h('span', {}, '复核结果：'),
-        h('b', { class: 'warn' }, post.text || '（无）'),
-        h('span', { class: 'dim' }, `置信度 ${(post.confidence * 100).toFixed(0)}%`),
-        post.candidates.length > 1 ? h('span', { class: 'dim' }, `　次优：${post.candidates[1]!.text} ${(post.candidates[1]!.probability * 100).toFixed(0)}%`) : null,
+      h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '把整段重新解一遍（可能会改掉在线时判错的字）'),
+      h(
+        'div',
+        { class: 'row', style: { fontSize: '14px' } },
+        h('span', {}, '重新解出来是：'),
+        h('b', { class: 'warn' }, post.text || '（什么都没发）'),
+        h('span', { class: 'dim' }, `把握 ${(post.confidence * 100).toFixed(0)}%`),
+        post.candidates.length > 1
+          ? h(
+              'span',
+              { class: 'dim' },
+              `　另一种可能：${post.candidates[1]!.text}（${(post.candidates[1]!.probability * 100).toFixed(0)}%）`,
+            )
+          : null,
       ),
       score.confusion.length
         ? h(
             'div',
             {},
-            h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '易错对'),
+            h('h3', { style: { color: 'var(--fg-dim)', fontSize: '12px' } }, '最容易发错的几个字'),
             h(
               'div',
               { class: 'row', style: { fontSize: '13px', gap: '14px' } },
-              ...score.confusion.slice(0, 8).map((c) =>
-                h('span', {}, `${c.target} → ${c.actual ?? '（漏）'} ×${c.count}`),
-              ),
+              ...score.confusion
+                .slice(0, 8)
+                .map((c) => h('span', {}, `${c.target} 发成了 ${c.actual ?? '（漏掉）'}，${c.count} 次`)),
             ),
           )
         : null,
       h(
         'div',
         { class: 'row', style: { marginTop: '18px' } },
-        h('button', { class: 'btn primary', onclick: () => { close(); retry(); } }, '重做这一条'),
-        h('button', { class: 'btn', onclick: () => { close(); next(); } }, '下一条'),
-        h('button', { class: 'btn ghost', onclick: () => close() }, '关闭'),
+        h('button', { class: 'btn primary', onclick: () => { close(); retry(); } }, '再拍一次'),
+        h('button', { class: 'btn', onclick: () => { close(); next(); } }, '换下一条'),
+        h('button', { class: 'btn ghost', onclick: () => close() }, '关上'),
       ),
     ),
   );

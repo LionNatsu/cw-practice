@@ -36,11 +36,11 @@ app.viewFactory = (tab: Tab, a: App): View => {
             h(
               'div',
               { class: 'card help' },
-              h('h2', {}, `欢迎使用 · 当前课程：${lessonById(a.lesson.id)?.title ?? a.lesson.title}`),
+              h('h2', {}, `第一次用，先花两分钟看看这里 · 当前在学：${lessonById(a.lesson.id)?.title ?? a.lesson.title}`),
               h(
                 'p',
                 { class: 'dim' },
-                '左边「练习」是主界面；这里是完整的使用说明与算法说明，建议第一次用之前花两分钟读完。',
+                '「练习」是主界面，其他几页分别是课程、成绩和设置。下面这些说明看完就够开始了。',
               ),
             ),
           );

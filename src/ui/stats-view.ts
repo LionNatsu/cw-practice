@@ -24,20 +24,24 @@ export class StatsView {
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, '总览'),
+        h('h2', {}, '练了多少'),
         h(
           'div',
           { class: 'timing-row' },
-          meter('累计练习', `${Math.round(p.totalMs / 60000)}`, '分钟'),
-          meter('总按键数', String(p.totalPresses), '次'),
-          meter('完成条目', String(attempts), '次结算'),
-          meter('字符总正确率', totalSeen ? `${(((totalSeen - totalWrong) / totalSeen) * 100).toFixed(1)}%` : '--', `${totalSeen - totalWrong}/${totalSeen}`),
-          meter('练过的字符', `${charEntries.length}`, `/ ${Object.keys(ALL_CHAR_TO_PATTERN).length}`),
+          meter('一共练了', `${Math.round(p.totalMs / 60000)}`, '分钟'),
+          meter('一共按了', String(p.totalPresses), '下'),
+          meter('看完成绩', String(attempts), '条'),
+          meter(
+            '总的发对比例',
+            totalSeen ? `${(((totalSeen - totalWrong) / totalSeen) * 100).toFixed(1)}%` : '--',
+            `${totalSeen - totalWrong} / ${totalSeen}`,
+          ),
+          meter('练过的字', `${charEntries.length}`, `共 ${Object.keys(ALL_CHAR_TO_PATTERN).length} 个`),
         ),
       ),
     );
 
-    // 逐字符表
+    // 逐字表
     const rows = charEntries
       .map(([ch, v]) => ({ ch, ...v, rate: v.wrong / v.seen }))
       .sort((a, b) => b.rate - a.rate || b.seen - a.seen);
@@ -47,12 +51,22 @@ export class StatsView {
       h(
         'thead',
         {},
-        h('tr', {}, h('th', {}, '字符'), h('th', {}, '码形'), h('th', {}, '练习'), h('th', {}, '错误'), h('th', {}, '错误率'), h('th', {}, '评价')),
+        h(
+          'tr',
+          {},
+          h('th', {}, '字'),
+          h('th', {}, '怎么发'),
+          h('th', {}, '发过几次'),
+          h('th', {}, '发错几次'),
+          h('th', {}, '错的比例'),
+          h('th', {}, '怎么样'),
+        ),
       ),
     );
     const tbody = h('tbody', {});
     for (const r of rows) {
-      const verdict = r.rate === 0 ? ['稳', 'good'] : r.rate < 0.2 ? ['可以', 'good'] : r.rate < 0.4 ? ['要注意', 'warn'] : ['重点练', 'bad'];
+      const verdict =
+        r.rate === 0 ? ['挺稳', 'good'] : r.rate < 0.2 ? ['还行', 'good'] : r.rate < 0.4 ? ['得留意', 'warn'] : ['重点练', 'bad'];
       tbody.appendChild(
         h(
           'tr',
@@ -66,14 +80,20 @@ export class StatsView {
         ),
       );
     }
-    if (rows.length === 0) tbody.appendChild(h('tr', {}, h('td', { colspan: 6, class: 'dim' }, '还没有数据，先去练几条吧。')));
+    if (rows.length === 0) {
+      tbody.appendChild(h('tr', {}, h('td', { colspan: 6, class: 'dim' }, '还没开始练，先去拍几条吧。')));
+    }
     table.appendChild(tbody);
-    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '逐字符错误率'), table));
+    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '每个字发错的次数'), table));
 
-    // 课程记录
+    // 每课的成绩
     const ltable = h('table', { class: 'grid' });
     ltable.appendChild(
-      h('thead', {}, h('tr', {}, h('th', {}, '课程'), h('th', {}, '次数'), h('th', {}, '最好成绩'), h('th', {}, '最近'))),
+      h(
+        'thead',
+        {},
+        h('tr', {}, h('th', {}, '课程'), h('th', {}, '练过几次'), h('th', {}, '最好的一次'), h('th', {}, '上次练')),
+      ),
     );
     const lbody = h('tbody', {});
     for (const lesson of LESSONS) {
@@ -90,44 +110,46 @@ export class StatsView {
         ),
       );
     }
-    if (!lbody.childElementCount) lbody.appendChild(h('tr', {}, h('td', { colspan: 4, class: 'dim' }, '还没有结算记录。')));
+    if (!lbody.childElementCount) {
+      lbody.appendChild(h('tr', {}, h('td', { colspan: 4, class: 'dim' }, '还没有成绩记录。')));
+    }
     ltable.appendChild(lbody);
-    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '课程记录'), ltable));
+    root.appendChild(h('div', { class: 'card' }, h('h2', {}, '每课的成绩'), ltable));
 
     // 数据管理
     root.appendChild(
       h(
         'div',
         { class: 'card' },
-        h('h2', {}, '数据'),
+        h('h2', {}, '这些数据'),
         h(
           'p',
           { class: 'dim', style: { fontSize: '12px' } },
-          '所有数据只存在这个浏览器里（localStorage），不上传任何服务器。',
+          '全部存在你自己的浏览器里，不会传到任何服务器。换电脑或者清了浏览器数据就没了。',
         ),
         h(
           'div',
           { class: 'row' },
-          h('button', { class: 'btn', onclick: () => this.exportJson() }, '导出 JSON'),
+          h('button', { class: 'btn', onclick: () => this.exportJson() }, '导出成文件'),
           h(
             'button',
             {
               class: 'btn danger',
               onclick: () => {
-                if (!confirm('确定清空所有统计与进度？此操作不可撤销。')) return;
+                if (!confirm('确定把统计和成绩都清掉？清掉就找不回来了。')) return;
                 this.app.saveProgress(structuredClone(EMPTY_PROGRESS));
-                toast('已清空进度', 'warn');
+                toast('已经清空了', 'warn');
                 this.app.go('stats');
               },
             },
-            '清空进度',
+            '全部清空',
           ),
           h(
             'button',
             {
               class: 'btn danger',
               onclick: () => {
-                if (!confirm('恢复默认设置？（统计不受影响）')) return;
+                if (!confirm('把设置改回默认值？（成绩不受影响）')) return;
                 this.app.saveSettings({
                   callsign: 'BG1ABC',
                   wpm: 12,
@@ -138,11 +160,11 @@ export class StatsView {
                   pauseUnits: 3.5,
                   tolerance: 0.5,
                 });
-                toast('已恢复默认设置', 'warn');
+                toast('设置已经改回默认值', 'warn');
                 this.app.go('settings');
               },
             },
-            '恢复默认设置',
+            '设置改回默认',
           ),
         ),
       ),

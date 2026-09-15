@@ -3,7 +3,7 @@
  *
  * 算法选择上做了一个明确的取舍：
  *
- *   束搜索（beam search）在"本地逐步分支"这件事上很自然，但它的代价是把结构性的
+ *   束搜索（beam search）在“本地逐步分支”这件事上很自然，但它的代价是把结构性的
  *   惩罚（断字代价）和码元似然混在一个局部贪心的比较里，任何一处标定偏差都会被
  *   放大成系统性错误（实测会把整句认成一串 E）。
  *
@@ -13,7 +13,7 @@
  *
  * 在线使用方式：每次按键到达后，对「到目前为止的全部按键」重跑一次全局最优。这样：
  *   - 线上结果与离线复核完全一致（不会给出两套答案）；
- *   - 前面判错的字会随着新证据被自动改写（满足"自适应修正前面若干字"的要求）；
+ *   - 前面判错的字会随着新证据被自动改写（满足“自适应修正前面若干字”的要求）；
  *   - 复杂度 O(n² · 码字长度)，几百个按键的报文完全够用。
  *
  * 「已定稿 / 可回改」的表达：最优路径的前缀连续多轮不变就落账；尾部不稳的部分
@@ -56,14 +56,14 @@ export function classifyGap(gapUnits: number | null): GapClass {
  */
 const GAP_SIGMA: Record<GapClass, number> = { intra: 0.38, char: 0.6, word: 0.9 };
 const GAP_MEAN: Record<GapClass, number> = { intra: 1, char: 3, word: 7 };
-/** 三种间隔的先验（对数权重）。断字比"继续拼同一个字"稍微常见一点。 */
+/** 三种间隔的先验（对数权重）。断字比“继续拼同一个字”稍微常见一点。 */
 const GAP_PRIOR: Record<GapClass, number> = { intra: 0, char: 0.2, word: 0.3 };
 
 /**
  * 落账一个字符的代价。
  *
  * 必须有这个常数（而不是 0），否则会出现病态行为：
- * 把两个字符拼成一个更长的码字时不用付任何"收尾"代价，长串反而显得更便宜。
+ * 把两个字符拼成一个更长的码字时不用付任何“收尾”代价，长串反而显得更便宜。
  */
 const CLOSE_COST = 0.6;
 
@@ -78,7 +78,7 @@ function lenPenalty(len: number): number {
 }
 
 /**
- * 语料偏置：练习内容是有意义的报文，所以"在课程里出现过"的字符应该比冷门
+ * 语料偏置：练习内容是有意义的报文，所以“在课程里出现过”的字符应该比冷门
  * 组合信号更容易被选中。给一点小优惠就够扭转平局，压不过真实的时序证据。
  */
 const CORPUS_BONUS = 0.45;
@@ -127,7 +127,7 @@ export interface DecoderOptions {
   charBoundaryBias?: number;
   /**
    * 语料字符集：练习目标文本里出现过的字符。
-   * 用于给"像正常报文"的解释一点偏好，避免把 "PARIS" 认成 "P+5" 这类冷门组合。
+   * 用于给“像正常报文”的解释一点偏好，避免把 "PARIS" 认成 "P+5" 这类冷门组合。
    */
   corpus?: Iterable<string>;
 }
@@ -167,7 +167,7 @@ export interface DecoderSnapshot {
   cost: number;
   /** 按键数。 */
   pressCount: number;
-  /** 最近一次"回改"事件。 */
+  /** 最近一次“回改”事件。 */
   revision: { id: number; from: string; to: string } | null;
 }
 
@@ -190,7 +190,7 @@ export class MorseDecoder {
   /** 最近几轮的最优解释（用于求公共前缀，决定哪些内容可以落账）。 */
   private history: string[] = [];
   private lastRevision: { id: number; from: string; to: string } | null = null;
-  /** 停顿标记：这些按键下标之前发生过一次"词间隔"。 */
+  /** 停顿标记：这些按键下标之前发生过一次“词间隔”。 */
   private wordBreaks = new Set<number>();
   /** 回改窗口：最近这么多个字符允许被改写。 */
   revisionWindow = 14;
@@ -273,7 +273,7 @@ export class MorseDecoder {
   /**
    * 用户停顿：把最优路径的尾部也落定，并在停顿处记一个**词边界**。
    *
-   * 停顿在 CW 里就是"空格"（标准词间隔 7 个单位）。用户练习时不需要真的把空格
+   * 停顿在 CW 里就是“空格”（标准词间隔 7 个单位）。用户练习时不需要真的把空格
    * 发出来，所以这里把停顿记成词边界，解码结果里自动还原成空格。
    */
   pushPause(model: TimingModel, now: number): DecoderSnapshot {
@@ -315,9 +315,9 @@ export class MorseDecoder {
   }
 
   /**
-   * 当前最优解释，并按"词间隔"插入空格。
+   * 当前最优解释，并按“词间隔”插入空格。
    *
-   * 空格在 CW 里不是字符，而是"比字符间隔更长的一段静音"（标准 7 个单位）。
+   * 空格在 CW 里不是字符，而是“比字符间隔更长的一段静音”（标准 7 个单位）。
    * 词边界有两个来源：真实的长间隔，以及用户停顿（pushPause 记下来的边界）。
    */
   bestTextWithSpaces(): string {
@@ -441,7 +441,7 @@ export class MorseDecoder {
    * 这是「可回改」的核心：单次最优解释随时可能被后面的按键改写
    * （典型例子：先认成 "ETT"，多发一个划之后整段变成 "E9"）。
    * 所以这里维护最近 HISTORY_ROUNDS 轮的解释，取它们的**最长公共前缀**作为可落账的内容，
-   * 公共前缀变短时会自动把已经落账的字撤回 —— 这正是"修正前面若干字"的机制。
+   * 公共前缀变短时会自动把已经落账的字撤回 —— 这正是“修正前面若干字”的机制。
    */
   private updateCommitted(path: Path, now: number): void {
     this.history.push(path.text + SEPARATOR);
@@ -551,7 +551,7 @@ export class MorseDecoder {
 
   /**
    * 某个字符的置信度：把它的切分点往两边挪一格，看最好的替代解释贵多少。
-   * 差距越大越确定。这是"这个字会不会被改"的直接度量。
+   * 差距越大越确定。这是“这个字会不会被改”的直接度量。
    */
   private confidenceAt(path: Path, index: number): number {
     const model = this.lastModel;

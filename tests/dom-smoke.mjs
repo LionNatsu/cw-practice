@@ -1,12 +1,12 @@
 /**
- * 无浏览器的"冒烟测试"：给产物搭一个最小 DOM 桩，把整个应用真的跑起来。
+ * 无浏览器的“冒烟测试”：给产物搭一个最小 DOM 桩，把整个应用真的跑起来。
  *
  * 为什么需要它：受限环境里 Chrome 起不来（需要 spawn 带管道的子进程），没法截图，
- * 而"打开页面一片空白"这类问题恰恰只有真跑一遍才能发现。这个脚本能验证：
+ * 而“打开页面一片空白”这类问题恰恰只有真跑一遍才能发现。这个脚本能验证：
  *   - 所有模块能加载（没有语法错误、没有写错的导入路径）
  *   - main.ts 的挂载与路由不抛异常
  *   - 练习视图真的渲染出了目标字符、手键区、指标、诊断面板
- *   - 真的拍一段 CQ 进去，抄收区/判定/结算弹窗能跟着动
+ *   - 真的拍一段 CQ 进去，抄收区、判定、成绩弹窗都能跟着动
  *
  * 用法：node tests/dom-smoke.mjs [dist|src]
  */
@@ -411,7 +411,7 @@ check(document.querySelectorAll('#view').length === 1, '#view 容器存在');
 
 // 切到练习页
 const practiceTab = document.querySelectorAll('.tab').find((t) => t.dataset.tab === 'practice');
-check(!!practiceTab, '找到"练习" tab');
+check(!!practiceTab, '找到“练习” tab');
 practiceTab?.click();
 advance(60);
 
@@ -428,12 +428,12 @@ if (tchars.length > 0) {
 
 // 这一课第一条应该是 E 或 T 之类的单字符
 
-// 武装手键
-const armBtn = document.querySelectorAll('button').find((b) => b.textContent.includes('武装'));
-check(!!armBtn, '找到"武装手键"按钮');
+// 开始拍发（按 id 点，别靠按钮文案——文案会改，id 不会）
+const armBtn = document.getElementById('arm-toggle');
+check(!!armBtn, '找到「开始拍发」按钮（id=arm-toggle）');
 armBtn?.click();
 advance(20);
-check(document.querySelectorAll('.armed-indicator.on').length === 1, '武装后指示灯变绿（.armed-indicator.on）');
+check(document.querySelectorAll('.armed-indicator.on').length === 1, '开始拍发后指示灯变绿（.armed-indicator.on）');
 
 // 真的拍一段 CQ 进去（用 window 级键盘事件当直键）
 const { ALL_CHAR_TO_PATTERN } = await import(`${corePrefix}morse.js`);
@@ -478,7 +478,7 @@ const correctCells = document.querySelectorAll('.tchar.correct').length;
 const diagRows = document.querySelectorAll('.dline').length;
 check(diagRows >= 2, `诊断面板有表头 + 数据行（${diagRows} 行）`);
 const pulseText = document.querySelectorAll('.pulse-dur')[0]?.textContent ?? '';
-check(/\d+ms/.test(pulseText) && /置信度/.test(pulseText), `脉冲显示时长与置信度：${JSON.stringify(pulseText)}`);
+check(/\d+ms/.test(pulseText) && /把握/.test(pulseText), `脉冲显示时长与把握：${JSON.stringify(pulseText)}`);
 check(correctCells > 0, `有字符被判对（${correctCells} 个 .tchar.correct）`);
 
 // 指标在动
@@ -489,15 +489,15 @@ check(
 );
 
 // 结算
-const settleBtn = document.querySelectorAll('button').find((b) => b.textContent.includes('结算'));
-check(!!settleBtn, '找到"结算"按钮');
+const settleBtn = document.querySelectorAll('button').find((b) => b.textContent.includes('看看成绩'));
+check(!!settleBtn, '找到「看看成绩」按钮');
 settleBtn?.click();
 advance(50);
 const modal = document.querySelectorAll('.modal')[0];
 check(!!modal, '结算弹窗弹出来了');
 if (modal) {
   check(/\d/.test(modal.textContent), `弹窗里有成绩：${JSON.stringify(modal.textContent.slice(0, 60))}`);
-  const closeBtn = modal.querySelectorAll('button').find((b) => b.textContent.includes('关闭'));
+  const closeBtn = modal.querySelectorAll('button').find((b) => b.textContent.includes('关上'));
   closeBtn?.click();
   advance(20);
   check(document.querySelectorAll('.modal').length === 0, '弹窗能关闭');

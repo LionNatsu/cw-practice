@@ -23,7 +23,7 @@ import { pressText } from './helpers.ts';
  * 两遍处理，模拟真实系统里的做法：
  *  1) 先让自适应时序模型看完整段（在线估计点长 / 划长 / 手抖程度）；
  *  2) 再用校准好的模型做一次流式解码。
- * 因为点长是"边拍边学"的，所以这样做同时也验证了「模型收敛后识别正确」。
+ * 因为点长是“边拍边学”的，所以这样做同时也验证了「模型收敛后识别正确」。
  */
 function decodeAll(
   presses: readonly Press[],
@@ -60,7 +60,7 @@ test('时序模型能从实际拍发中收敛到真实的点长', () => {
 
 test('点划分类在点长漂移后依然正确', () => {
   const model = new TimingModel(12);
-  // 先教它一个"慢手"：点 150ms、划 420ms
+  // 先教它一个“慢手”：点 150ms、划 420ms
   const slowPresses = pressText('EEEE TTTT EEEE TTTT', { dit: 150 });
   for (const p of slowPresses) model.update({ duration: p.duration, gapBefore: null });
   const slow = model.classifyByDuration(150);
@@ -121,6 +121,45 @@ test('码元越界（点划分布重叠）时给出低置信度而不是死板�
   const c = model.classifyByDuration(130);
   assert.ok(c.confidence < 0.75, `重叠分布下置信度应该不高，实际 ${c.confidence}`);
   assert.ok(model.perSymbolError > 0.05, `误判概率估计应该偏高，实际 ${model.perSymbolError}`);
+});
+
+test('短促的“点”不会被误判成抖动丢掉（踩过的坑）', () => {
+  // 背景：早期版本把“最近按键时长的中位数 × 0.3”当抖动阈值。那个中位数是把点和划
+  // 混在一起算的：划占比一过半，它就落在划那一侧（约等于划长），再乘 0.3 就可能比
+  // 用户正常的点还长 —— 点于是被当成抖动丢掉，划发得越多丢得越狠。
+  // 这里用“划很多的快报”来盯住这个行为：点长 40ms、划 180ms、以划为主。
+  // 手快的人点很短、用力不均的人划偏长，两者一叠加就会踩中这个坑。
+  const dit = 40;
+  const text = 'TTTT TTTT TT E TTTT E TTT E TTTT TT E TTTT';
+  const presses = pressText(text, { dit, dah: 180 });
+
+  // 1) 复现老写法：中位数 × 0.3 确实会吃掉 40ms 的点
+  const sorted = [...presses.map((p) => p.duration)].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const mixedMedian = sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  const oldFloor = mixedMedian * 0.3;
+  const eatenByOld = presses.filter((p) => p.duration < oldFloor).length;
+  assert.ok(
+    eatenByOld > 0,
+    `老阈值 ${oldFloor.toFixed(0)}ms（中位数 ${mixedMedian}ms）应当会吃掉一些 ${dit}ms 的点，实际吃掉 ${eatenByOld} 下`,
+  );
+
+  // 2) 新做法：绝对下限只有 18ms，自适应判断以“模型估出的点长”为基准，
+  //    所以 40ms 的点一个都不该丢，点长估计也不该被划拉高。
+  const model = new TimingModel(12);
+  for (let i = 0; i < presses.length; i++) {
+    const p = presses[i]!;
+    const prev = i > 0 ? presses[i - 1]! : null;
+    model.update({ duration: p.duration, gapBefore: prev ? p.down - prev.up : null });
+  }
+  assert.ok(Math.abs(model.ditMs - dit) < dit * 0.25, `点长估计 ${model.ditMs.toFixed(1)}ms 应接近 ${dit}ms`);
+  const floorNow = Math.max(18, model.ditMs * 0.3);
+  const eatenNow = presses.filter((p) => p.duration < floorNow).length;
+  assert.equal(eatenNow, 0, `新阈值 ${floorNow.toFixed(0)}ms 不该吃掉任何一下，实际吃掉 ${eatenNow} 下`);
+
+  // 3) 整段解码必须完整
+  const decoded = decodePresses(presses, model);
+  assert.equal(decoded.text, text, `解出来应与原文一致，实际 ${JSON.stringify(decoded.text)}`);
 });
 
 test('间隔分类：1 / 3 / 7 个单位分别判为字内、字间、词间', () => {
@@ -272,7 +311,7 @@ test('自适应会随着更多按键修正前面的判断（可回改）', () =>
   }
   decoder.pushPause(model, 9999);
   assert.equal(decoder.bestText(), 'PARIS');
-  assert.ok(sawRewrite, '在拍发过程中解释应该被修正过（这正是"自适应"的体现）');
+  assert.ok(sawRewrite, '在拍发过程中解释应该被修正过（这正是“自适应”的体现）');
   for (const c of decoder.committedChars) {
     assert.ok(c.revisions >= 0);
     assert.ok(c.confidence >= 0 && c.confidence <= 1);
@@ -293,7 +332,7 @@ test('性能：几百个按键的报文也能在每键一次重算下实时跑�
   const t0 = Date.now();
   for (const p of presses) decoder.pushPress(p, model, p.up);
   const elapsed = Date.now() - t0;
-  // 每次按键都会重跑一遍全局最优，总耗时必须在"一次练习"的量级内
+  // 每次按键都会重跑一遍全局最优，总耗时必须在“一次练习”的量级内
   assert.ok(elapsed < 5000, `重算总耗时 ${elapsed}ms 过慢`);
   const perPress = elapsed / presses.length;
   assert.ok(perPress < 25, `平均每键 ${perPress.toFixed(1)}ms，超出交互预算`);

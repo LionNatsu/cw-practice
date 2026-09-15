@@ -25,7 +25,7 @@ const MS_MAX = 900;
 
 /** 对数正态分布的 sigma 下限/上限（相对标准差）。
  * 下限不能太小：USB HID 只有 8ms 上报粒度，点长几十毫秒时量化误差就很可观，
- * 模型若声称"比硬件还准"，会把正常拍发也算成低置信度。
+ * 模型若声称“比硬件还准”，会把正常拍发也算成低置信度。
  */
 const SIGMA_MIN = 0.15;
 const SIGMA_MAX = 0.45;
@@ -75,10 +75,10 @@ export class TimingModel {
   /** 最近一批按键的原始时长，用来自适应重估模型。 */
   private recent: number[] = [];
   /**
-   * 到目前为止被判定为"点 / 划"的码元数。
+   * 到目前为止被判定为“点 / 划”的码元数。
    *
    * 注意不要用聚类窗口的大小来当这个数：新手只拍了一下时，2-means 根本分不出两类，
-   * 窗口是空的，界面上就会显示 n=0，看着像"没统计到"。
+   * 窗口是空的，界面上就会显示 n=0，看着像“没统计到”。
    */
   private ditCount = 0;
   private dahCount = 0;
@@ -174,17 +174,17 @@ export class TimingModel {
       this.allDahs.push(d);
       this.dahCount++;
     }
-    // 2) 再按"最近这么多下按键"整体重估模型
+    // 2) 再按“最近这么多下按键”整体重估模型
     this.recent.push(d);
     if (this.recent.length > REFIT_WINDOW) this.recent.splice(0, this.recent.length - REFIT_WINDOW);
     this.refit();
   }
 
   /**
-   * 用最近一批按键整体重估"点长 / 划长 / 手抖程度"。
+   * 用最近一批按键整体重估“点长 / 划长 / 手抖程度”。
    *
    * 为什么要整体重估，而不是只做单向的指数滑动平均：
-   * 一旦某次分类把 150ms 的"点"误判成"划"，这个错误会被直接吸收进 dah 的估计，
+   * 一旦某次分类把 150ms 的“点”误判成“划”，这个错误会被直接吸收进 dah 的估计，
    * 模型越跑越歪（实测会把点划合并到一起去）。
    *
    * 这里改成跑一次 2-means：
@@ -330,10 +330,10 @@ function trimmedMean(sorted: readonly number[]): number {
  * 直觉定义：「这次按键更像点还是更像划」的分明程度，再乘上模型本身的分辨能力
  * （点划两个分布的重叠程度）。两种不确定来源取较悲观的那个：
  *   - 这次观测本身贴近两类的分界 → 不确定；
- *   - 用户的点和划本来就分不开 → 无论观测多"标准"都不该报高置信度。
+ *   - 用户的点和划本来就分不开 → 无论观测多“标准”都不该报高置信度。
  *
- * 返回 0.5 表示"完全说不准"，这比返回 0 更直观：UI 上 0.5 就是
- * "猜的，可能有错"。
+ * 返回 0.5 表示“完全说不准”，这比返回 0 更直观：UI 上 0.5 就是
+ * “猜的，可能有错”。
  */
 export function likelihoodConfidence(costDit: number, costDah: number, separation = 6): number {
   if (!Number.isFinite(costDit) || !Number.isFinite(costDah)) return 0.5;

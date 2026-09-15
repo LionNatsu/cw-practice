@@ -1,12 +1,18 @@
 /**
- * 输入捕获：把“USB HID 直键（表现为鼠标按键）”变成带精确时长的按下/抬起事件。
+ * 输入捕获：把直键（HID 鼠标 / 键盘 / 触屏）的按下-抬起变成带精确时长的“码元”。
  *
  * 硬件事实：鼠标类 HID 设备最小上报间隔是 8ms（USB 全速轮询）或 1ms（高速），
- * 通常还会被系统/浏览器再平滑一次，所以时长精度大约在 ±8~16ms。
- * 因此：
- *  - 用 performance.now() 在事件回调里立刻取时间戳；
- *  - 默认不做去抖动过滤（debounceMs = 0），因为真实的点本来就可能只有 40~80ms；
- *  - 只过滤掉“误触”（默认阈值取用户点长的 35%，见中位数自适应）。
+ * 再经过系统与浏览器处理，一次按键的时长误差大约 ±8~16ms。所以：
+ *  - 在事件回调里立刻用 performance.now() 取时间戳；
+ *  - 真实拍发的“点”本来就可能只有 40~80ms，绝不能按固定毫秒数一刀切；
+ *  - 只丢掉“根本不像按键”的极短脉冲（默认 18ms 以下，比任何人的点都短得多）。
+ *
+ * 曾经踩过的坑（务必保留这段注释）：
+ *   早期版本用“最近按键时长的中位数 × 0.3”当抖动阈值。但那个中位数是把“点”和“划”
+ *   混在一起算的 —— 按标准比例（PARIS 计时）大约落在 2.1 倍点长附近，乘 0.3 就是
+ *   0.62 倍点长，比用户正常的“点”还长。结果就是点被当成抖动丢掉，而且划发得越多
+ *   丢得越狠（中位数被划拉高）。现在改成以**时序模型估出的点长**为基准，
+ *   并且只在样本足够多时才启用这个自适应判断。
  */
 
 import { median } from '../core/util.ts';
@@ -27,10 +33,13 @@ export interface KeyEdge {
 }
 
 export interface KeyInputOptions {
-  /** 过滤阈值（ms）。小于该时长的按下被当成抖动丢弃。0 = 不过滤。 */
+  /** 绝对下限（ms）：短于它的按下直接丢掉。默认 18ms。 */
   debounceMs?: number;
-  /** 自适应误触阈值倍率（相对于最近的典型点长）。 */
-  adaptiveFilter?: boolean;
+  /**
+   * 自适应误触判断：低于「点长 × 0.3」的按下视为抖动。
+   * 需要一个能给出当前点长估计的函数；没有它就不做这个判断。
+   */
+  baselineMs?: () => number;
   allowMouseLeft?: boolean;
   allowRightButton?: boolean;
   allowKeyboard?: boolean;
@@ -39,14 +48,22 @@ export interface KeyInputOptions {
   onDown?: (down: number, ev: Event) => void;
   onUp?: (edge: KeyEdge) => void;
   onIgnored?: (edge: KeyEdge) => void;
-  onKeyEvent?: (ev: KeyboardEvent) => void;
-  /** 由外部提供"现在是否武装"，用于决定要不要 preventDefault 键盘按键。 */
-  isArmed?: () => boolean;
+  /** 由外部提供“现在是否在拍发”，用来决定要不要 preventDefault 键盘按键。 */
+  isLive?: () => boolean;
 }
 
 const DEFAULT_KEYS = ['Space', 'KeyJ', 'KeyK', 'KeyF', 'KeyD', 'NumpadEnter', 'Enter'];
 
-type ResolvedOptions = Required<Omit<KeyInputOptions, 'onDown' | 'onUp' | 'onIgnored' | 'onKeyEvent' | 'isArmed'>> &
+/** 绝对下限：比任何人的“点”都短，只用来挡电路/驱动的瞬时脉冲。 */
+const DEFAULT_FLOOR_MS = 18;
+/** 自适应抖动判断的倍率（相对点长）。 */
+const CHATTER_RATIO = 0.3;
+/** 至少要有多少次按键，才敢用自适应判断。 */
+const MIN_SAMPLES_FOR_ADAPTIVE = 8;
+
+type ResolvedOptions = Required<
+  Omit<KeyInputOptions, 'onDown' | 'onUp' | 'onIgnored' | 'baselineMs' | 'isLive'>
+> &
   KeyInputOptions;
 
 export class KeyInput {
@@ -55,46 +72,47 @@ export class KeyInput {
   private downAt: number | null = null;
   private source: KeyEdge['source'] = 'mouse';
   private button = 0;
-  private armed = false;
+  private live = false;
   private durations: number[] = [];
   private disposers: Array<() => void> = [];
 
   constructor(el: HTMLElement, opts: KeyInputOptions = {}) {
     this.el = el;
     this.opts = {
-      debounceMs: opts.debounceMs ?? 0,
-      adaptiveFilter: opts.adaptiveFilter ?? true,
+      debounceMs: opts.debounceMs ?? DEFAULT_FLOOR_MS,
       allowMouseLeft: opts.allowMouseLeft ?? true,
       allowRightButton: opts.allowRightButton ?? true,
       allowKeyboard: opts.allowKeyboard ?? true,
       keys: opts.keys ?? DEFAULT_KEYS,
+      baselineMs: opts.baselineMs,
+      isLive: opts.isLive,
       onDown: opts.onDown,
       onUp: opts.onUp,
       onIgnored: opts.onIgnored,
-      onKeyEvent: opts.onKeyEvent,
     };
     this.attach();
   }
 
-  /** 是否“武装”：只有武装状态下按键才进入练习，避免误点 UI 时打字。 */
-  setArmed(armed: boolean): void {
-    if (!armed && this.downAt !== null) {
-      // 解除武装时正在按下：直接收尾并丢弃
+  /** 是否正在拍发：只有拍发状态下按键才进入练习，避免误点 UI 时乱发码。 */
+  setLive(live: boolean): void {
+    if (!live && this.downAt !== null) {
       const up = performance.now();
       const edge = this.makeEdge(up);
       this.downAt = null;
-      if (edge && this.opts.onIgnored) this.opts.onIgnored({ ...edge, ignored: true, ignoreReason: '解除武装' });
+      if (edge && this.opts.onIgnored) {
+        this.opts.onIgnored({ ...edge, ignored: true, ignoreReason: '已停止拍发' });
+      }
     }
-    this.armed = armed;
+    this.live = live;
   }
 
-  get isArmed(): boolean {
-    return this.armed;
+  get isLive(): boolean {
+    return this.live;
   }
 
-  /** 最近的典型点长（中位数）。 */
+  /** 最近这些按键的中位数时长（仅用于界面显示，不参与过滤）。 */
   get typicalDuration(): number {
-    return this.durations.length >= 3 ? median(this.durations) / 2.2 : 0;
+    return this.durations.length >= 3 ? median(this.durations) : 0;
   }
 
   get recentDurations(): readonly number[] {
@@ -114,18 +132,17 @@ export class KeyInput {
       this.end(performance.now(), e);
     };
     const keydown = (e: KeyboardEvent) => {
-      this.opts.onKeyEvent?.(e);
       if (e.code === 'Escape') return; // Esc 交给上层处理
       if (!this.opts.allowKeyboard) return;
       if (!this.opts.keys.includes(e.code)) return;
-      // 键盘在输入框里时不要抢按键（否则没法输入呼号）
+      // 在输入框里不要抢按键，否则没法输入呼号
       if (isTextEntry(e.target)) return;
-      // 只要按的是"拍键键位"就一律 preventDefault：
-      // 空间/回车是按钮的默认激活键，如果不吞掉，抬手时焦点所在的按钮就会被"点一下"
-      // ——实测会出现"拍到一半手键被自动解除武装"这种诡异现象。
+      // 只要是拍键键位就一律 preventDefault：空格/回车是按钮的默认激活键，
+      // 不吞掉的话，抬键时焦点所在的按钮会被“点一下”
+      // ——实测会出现“拍到一半手键被自动解除”这种怪事。
       e.preventDefault();
-      const armedNow = this.opts.isArmed ? this.opts.isArmed() : this.armed;
-      if (!armedNow) return;
+      const liveNow = this.opts.isLive ? this.opts.isLive() : this.live;
+      if (!liveNow) return;
       if (e.repeat) return;
       this.begin(performance.now(), 'keyboard', 0, e);
     };
@@ -140,10 +157,11 @@ export class KeyInput {
     const contextmenu = (e: Event) => e.preventDefault();
     const blur = () => {
       if (this.downAt !== null) {
-        const up2 = performance.now();
-        const edge = this.makeEdge(up2);
+        const edge = this.makeEdge(performance.now());
         this.downAt = null;
-        if (edge && this.opts.onIgnored) this.opts.onIgnored({ ...edge, ignored: true, ignoreReason: '窗口失去焦点' });
+        if (edge && this.opts.onIgnored) {
+          this.opts.onIgnored({ ...edge, ignored: true, ignoreReason: '窗口失去焦点' });
+        }
       }
     };
 
@@ -164,16 +182,15 @@ export class KeyInput {
   }
 
   private begin(down: number, source: KeyEdge['source'], button: number, ev: Event): void {
-    // 非武装状态下的按键只作为“武装提示”，不参与练习
-    if (this.downAt !== null) return; // 已经有按下的键，忽略重复
-    this.downAt = down;
+    if (this.downAt !== null) return; // 已经按着了，忽略重复的按下
     this.source = source;
     this.button = button;
-    if (!this.armed) {
-      this.downAt = null;
+    if (!this.live) {
+      // 没在拍发：只当作“想开始”的信号，不记录时长
       this.opts.onDown?.(down, ev);
       return;
     }
+    this.downAt = down;
     this.opts.onDown?.(down, ev);
   }
 
@@ -183,9 +200,11 @@ export class KeyInput {
     const edge = this.makeEdge(up);
     this.downAt = null;
     if (!edge) return;
-    if (this.armed && !edge.ignored) this.durations.push(edge.duration);
-    if (this.durations.length > 60) this.durations.splice(0, this.durations.length - 60);
-    if (this.armed) this.opts.onUp?.(edge);
+    if (this.live && !edge.ignored) {
+      this.durations.push(edge.duration);
+      if (this.durations.length > 60) this.durations.splice(0, this.durations.length - 60);
+    }
+    if (this.live) this.opts.onUp?.(edge);
     else this.opts.onIgnored?.(edge);
   }
 
@@ -204,20 +223,25 @@ export class KeyInput {
     if (reason) {
       edge.ignored = true;
       edge.ignoreReason = reason;
-      return edge;
     }
     return edge;
   }
 
-  /** 判定是否为误触/抖动。返回原因或 null。 */
+  /** 判断这一次按下是不是“根本不像按键”。返回原因或 null。 */
   private filterReason(duration: number): string | null {
     if (duration <= 0) return '零时长';
+    // 1) 绝对下限：挡住电路/驱动的瞬时脉冲（比任何人的点都短得多）
     if (this.opts.debounceMs > 0 && duration < this.opts.debounceMs) {
-      return `短于设定阈值 ${this.opts.debounceMs}ms`;
+      return `只有 ${Math.round(duration)}ms，太短了（短于 ${this.opts.debounceMs}ms 一律忽略）`;
     }
-    if (this.opts.adaptiveFilter && this.durations.length >= 6) {
-      const typical = median(this.durations);
-      if (duration < typical * 0.3) return `疑似抖动（典型点长 ${typical.toFixed(0)}ms）`;
+    // 2) 自适应：明显短于“点”的按键，通常是按键抖动或误碰。
+    //    基准取自时序模型估出的点长，而不是“点划混在一起的中位数”。
+    const baseline = this.opts.baselineMs?.() ?? 0;
+    if (baseline > 0 && this.durations.length >= MIN_SAMPLES_FOR_ADAPTIVE) {
+      const floor = baseline * CHATTER_RATIO;
+      if (duration < floor) {
+        return `只有 ${Math.round(duration)}ms，明显短于你的点长（约 ${Math.round(baseline)}ms），按抖动忽略`;
+      }
     }
     return null;
   }

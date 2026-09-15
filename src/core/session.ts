@@ -67,7 +67,7 @@ export interface SessionSnapshot {
   lastSymbol: ClassifiedSymbol | null;
   /** 最近被回改的记录。 */
   lastRevision: RevisionEvent | null;
-  /** 解码器最近一次"改写前面字符"的事件（来自在线重算）。 */
+  /** 解码器最近一次“改写前面字符”的事件（来自在线重算）。 */
   revision: { id: number; from: string; to: string } | null;
 }
 
@@ -93,7 +93,7 @@ export class PracticeSession {
     this.model = new TimingModel(this.config.wpm, { speedLocked: this.config.speedLocked });
     this.decoder = new MorseDecoder({ charBoundaryBias: 0 });
     this.decoder.revisionWindow = this.config.revisionWindow;
-    // 语料 = 本条目标报文里出现过的字符，用来给"像正常报文"的解释一点偏好
+    // 语料 = 本条目标报文里出现过的字符，用来给“像正常报文”的解释一点偏好
     this.decoder.setCorpus(this.item.text.toUpperCase().replace(/\s+/g, ''));
     if (knownChars) this.knownChars = new Set(knownChars);
     this.buildTarget();
@@ -258,7 +258,7 @@ export class PracticeSession {
   snapshot(): SessionSnapshot {
     const dec = this.decoder.snapshot();
     const actualChars = [...dec.committed.map((c) => c.text), ...dec.pending.map((p) => p.text)];
-    // 抄收区显示"当前最优解释"：已落账的字 + 还没落账的尾部。
+    // 抄收区显示“当前最优解释”：已落账的字 + 还没落账的尾部。
     const decoded = actualChars.join('');
     const res = align(this.targetText, decoded);
     const scores = toCharScores(res, dec.committed, actualChars);
