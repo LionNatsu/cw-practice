@@ -1,0 +1,10 @@
+# pnpm 设置（pnpm 10+ 从这里的设置项读取，不再读 package.json 的 pnpm 字段）
+#
+# esbuild 的 postinstall 只做一件事：spawn 一下自己的原生二进制来校验版本。
+# 有些环境禁止 spawn 子进程（受限沙箱、部分企业策略），这一步会直接失败，
+# 而它失败并不影响使用 —— vite 依赖的原生二进制是由 @esbuild/win32-x64
+# 这类平台包直接放好的，npm 的 optionalDependencies 机制已经装了它。
+#
+# 所以这里设为 false（不执行安装脚本），换取 `pnpm install` 在任何环境下都能通过。
+allowBuilds:
+  esbuild: false
