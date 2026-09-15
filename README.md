@@ -36,10 +36,10 @@ pnpm test:browser     # 用无头 Chrome 真点真拍并截图（见“浏览器
 
 | 命令 | 做什么 |
 | --- | --- |
-| `pnpm test` | 引擎行为规格（拍错不放过、前缀不判错、50~250ms 手速自适应）+ 码表、课程、进度 |
+| `pnpm test` | 引擎行为规格（拍错不放过、前缀不判错、50~250ms 手速自适应）、码表/课程/进度、音频调度（36+6 例） |
 | `pnpm test:smoke` | 构建产物 + 最小 DOM 桩，真跑一遍 App：路由、渲染、拍一段字、结算弹窗（26 项断言） |
-| `pnpm test:audio` | `OfflineAudioContext` 离线渲染，断言一个点只响 100ms、PARIS 响 14 段 |
-| `pnpm test:browser` | 用 CDP 驱动无头 Chrome 打开页面，真点按钮、真按空格拍键，截图并断言（25 项） |
+| `pnpm test:browser` | 用 CDP 驱动无头 Chrome 打开页面，真点按钮、真按空格拍键，截图并断言（26 项） |
+| `pnpm test:audio:browser` | 无头 Chrome 里离线渲染侧音波形，按 5ms 窗口分析包络（本地按需跑） |
 
 `pnpm test:browser` 需要先起静态服务器：
 
@@ -53,6 +53,10 @@ CW_URL=https://lionnatsu.github.io/cw-practice/ pnpm test:browser   # 也可以�
 style 比对 rgb 值）、按住时发报条是不是真的长出来、拍错是不是真的给红问号、
 成绩弹窗有成绩、报文里能看出分词，并留下 12 张截图（帮助/练习/开始/按住/拍对/拍错/
 结算/课程/长报文/设置/统计）。
+
+需要真实浏览器的两项（`test:browser`、`test:audio:browser`）不进 CI：各要冷启一台
+Chrome，加起来一分多钟，而它们查的东西（模块能不能加载、波形对不对）在零依赖的
+单测与 DOM 冒烟里已经有对应的快检查。CI 只跑秒级的那几个，发布不被拖住。
 
 > 之所以做这些，是因为踩过一次真实的坑：线上白屏了两轮，第一轮是 Pages 发的是仓库根
 > 目录而不是构建产物，第二轮是产物里残留 `src="/./main.js"`（绝对路径 → 子目录下 404）。

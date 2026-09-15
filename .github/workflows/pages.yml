@@ -1,8 +1,10 @@
 # 把纯静态站点发布到 GitHub Pages。
 #
-# 这里刻意用 `pnpm build:nodeps`（零依赖构建脚本）而不是 Vite：
-# 项目的目标就是"没有运行时依赖的静态站点"，这个脚本在任何 Node 22.13+ 环境都能跑，
-# 也避免了 esbuild 在受限环境里 spawn 子进程失败的问题。
+# 这里刻意用零依赖构建脚本而不是 Vite：项目的目标就是"没有运行时依赖的静态站点"，
+# 这个脚本在任何 Node 22.13+ 环境都能跑，也避免了 esbuild 在受限环境里 spawn 子进程失败。
+#
+# 只跑零依赖、秒级的检查。真实浏览器的检查（截图、离线渲染波形）留在本地按需跑：
+# 它们要冷启一台 Chrome，一分钟里五十秒都花在那儿，不值得卡住每次发布。
 name: Deploy to GitHub Pages
 
 on:
@@ -27,21 +29,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: 跑引擎行为测试
-        run: node --experimental-strip-types tests/engine.test.ts
-      - name: 跑核心逻辑测试
-        run: node --experimental-strip-types tests/core.test.ts
-      - name: 中文标点检查
-        run: node scripts/check-punctuation.mjs
-      - name: 构建静态站点（零依赖）
-        run: node scripts/build.mjs
-      - name: 冒烟测试（最小 DOM 桩，真跑一遍构建产物）
-        run: node tests/dom-smoke.mjs dist
-      - name: 音频测试（离线渲染波形，防止整段变成长音）
-        # 这一步要浏览器加载页面，所以自己起一个静态服务器；脚本结束时会关掉它
-        run: node tests/audio-check.mjs dist
-      - name: 产物自检（防止再发出白屏站点）
-        run: node scripts/verify-dist.mjs
+      - name: 测试与构建
+        run: |
+          node --experimental-strip-types tests/engine.test.ts
+          node --experimental-strip-types tests/core.test.ts
+          node --experimental-strip-types tests/audio.test.ts
+          node scripts/check-punctuation.mjs
+          node scripts/build.mjs
+          node tests/dom-smoke.mjs dist
+          node scripts/verify-dist.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -158,7 +158,8 @@ export class MorseAudio {
         }
         if (i < chars.length - 1) t += 2 * dit; // 字符间隔共 3 单位（1 单位已加）
       }
-      if (w < words.length - 1) t += 4 * dit; // 词间隔共 7 单位
+      // 词间隔标准是 7 个单位，同样已经加了 1 个单位
+      if (w < words.length - 1) t += 6 * dit;
     }
     const total = (t - start) * 1000;
     playOsc.start(start);
