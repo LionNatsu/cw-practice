@@ -15,15 +15,45 @@
 ```bash
 pnpm install          # 装开发依赖（只有 vite / typescript / @types/node）
 pnpm dev              # 开发服务器，默认 http://localhost:5173
-pnpm test             # 核心逻辑单元测试（Node 原生，零依赖）
+pnpm test             # 核心逻辑单元测试（Node 原生，零依赖，19 个用例）
 pnpm build            # tsc 类型检查 + vite 打包到 dist/
 pnpm build:nodeps     # 零依赖构建（只用 Node，见下文"为什么有两套构建"）
+pnpm verify:dist      # 产物自检：路径/依赖是否能在子目录下正常部署
+pnpm test:smoke       # 无浏览器冒烟测试：用最小 DOM 桩把产物真跑一遍
+pnpm serve            # 用零依赖静态服务器预览 dist（默认 8080）
+pnpm test:browser     # 用无头 Chrome 真点真拍并截图（见"浏览器实测"）
 ```
 
 打开页面后：**课程**里选一课 → **练习** → 点「武装手键」（或按 `Esc`）→ 像拍真直键一样点击。
 
 没有硬件也能练：鼠标左键/右键、键盘 `空格` `J` `K` `回车` 都可以当直键。
 `Esc` 武装/解除，`R` 听当前条目的标准参考发送，`N` 下一条。
+
+## 自动化测试与"截图验收"
+
+三层，全部零依赖（不引入 puppeteer/playwright）：
+
+| 命令 | 做什么 |
+| --- | --- |
+| `pnpm test` | 核心算法单测：时序模型收敛、抖动 ±18% 下的解码、不同手速自适应、回改行为、对齐计分、性能预算 |
+| `pnpm test:smoke` | 构建产物 + 最小 DOM 桩，真跑一遍 App：路由、渲染、拍一段字、结算弹窗（25 项断言） |
+| `pnpm test:browser` | 用 CDP 驱动无头 Chrome 打开页面，真点按钮、真按空格拍键，截图并断言 |
+
+`pnpm test:browser` 需要先起静态服务器：
+
+```bash
+node scripts/serve.mjs dist 8123      # 另开一个进程
+pnpm test:browser                     # 截图输出到 .shots/
+CW_URL=https://lionnatsu.github.io/cw-practice/ pnpm test:browser   # 也可以直接测线上
+```
+
+它会检查：页面不是空白、无 JS 报错、武装状态、**判对的字是不是真的变绿**（读 computed
+style 比对 rgb 值）、判错是不是真的变红、诊断面板有记录、结算弹窗有成绩，并留下 10 张
+截图（帮助/练习/武装/拍对/拍错/结算/课程/设置/统计）。
+
+> 之所以做这些，是因为踩过一次真实的坑：线上白屏了两轮，第一轮是 Pages 发的是仓库根
+> 目录而不是构建产物，第二轮是产物里残留 `src="/./main.js"`（绝对路径 → 子目录下 404）。
+> 现在 `scripts/verify-dist.mjs` 和 CI 里的产物自检会拦住这类问题。
 
 ## 它是怎么"听懂"手键的
 

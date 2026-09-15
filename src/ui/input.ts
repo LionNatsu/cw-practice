@@ -118,18 +118,23 @@ export class KeyInput {
       if (e.code === 'Escape') return; // Esc 交给上层处理
       if (!this.opts.allowKeyboard) return;
       if (!this.opts.keys.includes(e.code)) return;
+      // 键盘在输入框里时不要抢按键（否则没法输入呼号）
+      if (isTextEntry(e.target)) return;
+      // 只要按的是"拍键键位"就一律 preventDefault：
+      // 空间/回车是按钮的默认激活键，如果不吞掉，抬手时焦点所在的按钮就会被"点一下"
+      // ——实测会出现"拍到一半手键被自动解除武装"这种诡异现象。
+      e.preventDefault();
       const armedNow = this.opts.isArmed ? this.opts.isArmed() : this.armed;
-      // 未武装时不要吞掉按键，否则空格键没法激活按钮
       if (!armedNow) return;
       if (e.repeat) return;
-      e.preventDefault();
       this.begin(performance.now(), 'keyboard', 0, e);
     };
     const keyup = (e: KeyboardEvent) => {
       if (!this.opts.allowKeyboard) return;
       if (!this.opts.keys.includes(e.code)) return;
-      if (this.downAt === null) return;
+      if (isTextEntry(e.target)) return;
       e.preventDefault();
+      if (this.downAt === null) return;
       this.end(performance.now(), e);
     };
     const contextmenu = (e: Event) => e.preventDefault();
@@ -221,4 +226,14 @@ export class KeyInput {
     for (const d of this.disposers) d();
     this.disposers = [];
   }
+}
+
+/** 事件目标是不是正在输入文本的地方（输入框 / textarea / contenteditable）。
+ *  这类元素里不能抢按键，否则用户没法输入呼号等设置项。 */
+function isTextEntry(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || typeof (el as { tagName?: unknown }).tagName !== 'string') return false;
+  const tag = el.tagName.toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return el.isContentEditable === true;
 }

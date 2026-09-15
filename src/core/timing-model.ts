@@ -74,9 +74,14 @@ export class TimingModel {
   private dahLogs: number[] = [];
   /** 最近一批按键的原始时长，用来自适应重估模型。 */
   private recent: number[] = [];
-  /** 本次自适应重估里被判为"点 / 划"的样本数（用于指标显示，别用聚类结果直接当置信度）。 */
-  private countDit = 0;
-  private countDah = 0;
+  /**
+   * 到目前为止被判定为"点 / 划"的码元数。
+   *
+   * 注意不要用聚类窗口的大小来当这个数：新手只拍了一下时，2-means 根本分不出两类，
+   * 窗口是空的，界面上就会显示 n=0，看着像"没统计到"。
+   */
+  private ditCount = 0;
+  private dahCount = 0;
   private window = 40;
   /** 速度是否被用户锁定（锁定后 ditMs 不随观测漂移，但仍统计节奏）。 */
   speedLocked = false;
@@ -162,8 +167,13 @@ export class TimingModel {
   observe(kind: SymbolKind, duration: number): void {
     const d = clamp(duration, MS_MIN, MS_MAX);
     // 1) 先按当前分类把观测放进滑动窗口（用于统计与展示）
-    if (kind === 'dit') this.allDits.push(d);
-    else this.allDahs.push(d);
+    if (kind === 'dit') {
+      this.allDits.push(d);
+      this.ditCount++;
+    } else {
+      this.allDahs.push(d);
+      this.dahCount++;
+    }
     // 2) 再按"最近这么多下按键"整体重估模型
     this.recent.push(d);
     if (this.recent.length > REFIT_WINDOW) this.recent.splice(0, this.recent.length - REFIT_WINDOW);
@@ -222,6 +232,8 @@ export class TimingModel {
     if (ditList.length === 0 || dahList.length === 0) return;
     ditList.sort((a, b) => a - b);
     dahList.sort((a, b) => a - b);
+    // 样本数在任何情况下都记下来（哪怕这次聚类没法分出两类），
+    // 否则新手第一下会看到 "n=0"，像是没统计到。
     if (!this.speedLocked) {
       this.ditMs = clamp(trimmedMean(ditList), MS_MIN, MS_MAX);
       this.dahMs = clamp(trimmedMean(dahList), MS_MIN, MS_MAX);
@@ -229,8 +241,6 @@ export class TimingModel {
     }
     this.ditObs = ditList;
     this.dahObs = dahList;
-    this.countDit = ditList.length;
-    this.countDah = dahList.length;
     this.ditLogs = ditList.map((d) => Math.log(d / this.ditMs));
     this.dahLogs = dahList.map((d) => Math.log(d / this.dahMs));
   }
@@ -273,8 +283,8 @@ export class TimingModel {
       dah: this.dahMs,
       cvDit: this.sigmaDit,
       cvDah: this.sigmaDah,
-      nDit: this.countDit,
-      nDah: this.countDah,
+      nDit: this.ditCount,
+      nDah: this.dahCount,
       perSymbolError: this.perSymbolError,
       rhythmScore: this.rhythmScore,
       wpm: this.wpm,

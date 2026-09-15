@@ -85,7 +85,9 @@ export class PracticeView {
       'div',
       { class: 'row', style: { marginBottom: '10px' } },
       this.armedEl,
-      h('button', { class: 'btn primary', onclick: () => this.toggleArm() }, '武装手键'),
+      // 给一个稳定的 id：自动化测试（tests/screenshot.mjs）靠它精确点击，
+      // 而不是靠"按钮文字里包含武装"——那种匹配在状态切换的瞬间会点到别的按钮。
+      h('button', { class: 'btn primary', id: 'arm-toggle', onclick: () => this.toggleArm() }, '武装手键'),
       h('button', { class: 'btn', onclick: () => this.replayReference() }, '听参考发送（R）'),
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', onclick: () => this.restartItem() }, '重做本条目'),
@@ -242,7 +244,12 @@ export class PracticeView {
     this.armedEl.appendChild(document.createTextNode(this.armed ? '手键已武装 · 开始拍发' : '未武装'));
     this.keypadEl.classList.toggle('armed', this.armed);
     const btn = this.keypadEl.parentElement?.querySelector<HTMLButtonElement>('button.primary');
-    if (btn) btn.textContent = this.armed ? '解除武装' : '武装手键';
+    if (btn) {
+      btn.textContent = this.armed ? '解除武装' : '武装手键';
+      // 把焦点从按钮上摘掉：否则武装之后按空格拍键，浏览器会拿它去"点击"这个
+      // 仍然有焦点的按钮（空格是按钮的默认激活键），拍到一半就把手键解除了。
+      btn.blur();
+    }
     if (this.armed) {
       void this.app.audio.resume();
       this.session.setPaused(false);

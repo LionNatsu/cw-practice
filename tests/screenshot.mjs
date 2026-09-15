@@ -243,6 +243,13 @@ class Cdp {
         else resolve(msg.result);
       } else if (msg.method) {
         this.events.push(msg);
+        // 把页面里的 console 输出实时打出来，排障时非常有用
+        if (msg.method === 'Runtime.consoleAPICalled') {
+          const text = (msg.params.args ?? [])
+            .map((a) => (a.value !== undefined ? String(a.value) : a.description ?? ''))
+            .join(' ');
+          console.log(`  [page:${msg.params.type}] ${text}`);
+        }
       }
     });
   }
@@ -375,6 +382,23 @@ async function main() {
 
   const click = (js) => cdp.evaluate(`(() => { const el = ${js}; if (!el) return false; el.click(); return true; })()`);
   const byText = (sel, text) => `[...document.querySelectorAll('${sel}')].find(e => e.textContent.includes('${text}'))`;
+  /** 按 id 点击（稳定的自动化入口）。 */
+  const clickId = (id) => click(`document.getElementById('${id}')`);
+  /** 轮询等待某个条件成立。 */
+  const waitFor = async (expr, timeoutMs = 3000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await cdp.evaluate(`!!(${expr})`)) return true;
+      await delay(60);
+    }
+    return false;
+  };
+  const isArmed = () => cdp.evaluate(`!!document.querySelector('.armed-indicator.on')`);
+  const setArmed = async (want) => {
+    if ((await isArmed()) === want) return true;
+    await clickId('arm-toggle');
+    return waitFor(want ? `document.querySelector('.armed-indicator.on')` : `document.querySelector('.armed-indicator.off')`);
+  };
 
   try {
     const target = await waitForCdp(DEBUG_PORT);
@@ -386,6 +410,9 @@ async function main() {
     cdp = new Cdp(ws);
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
+    await cdp.send('Network.enable');
+    // 禁用缓存：否则会加载上一次跑剩下的旧模块，"修了但看起来没修"
+    await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
 
     console.log(`[screenshot] 打开 ${URL_TARGET}`);
     await cdp.send('Page.navigate', { url: URL_TARGET });
@@ -414,9 +441,8 @@ async function main() {
     check(tchars > 0, `练习页渲染出 ${tchars} 个目标字符`);
 
     // 3) 武装
-    await click(byText('button', '武装'));
-    await delay(300);
-    check(await cdp.evaluate(`!!document.querySelector('.armed-indicator.on')`), '手键已武装（指示灯变绿）');
+    await setArmed(true);
+    check(await isArmed(), '手键已武装（指示灯变绿）');
     await shot('03-armed');
 
     // 4) 真的拍当前条目（用 110ms 的点）
@@ -464,21 +490,31 @@ async function main() {
     await click(byText('.modal button', '关闭'));
     await delay(200);
 
-    // 6) 故意发错：目标 E 发成 T，看红色
+    // 6) 故意发错：目标第 1 条是 E，我们发 T，看红色判定
     await click(byText('button', '重做本条目'));
-    await delay(400);
-    await click(byText('button', '武装'));
-    await delay(200);
-    await keyer.char('T'); // 目标第 1 条是 E
-    await delay(800);
+    await delay(500);
+    const armed2 = await setArmed(true);
+    const indicatorDump = await cdp.evaluate(
+      `[...document.querySelectorAll('.armed-indicator')].map(e => e.className).join(' ~ ')`,
+    );
+    const targetWrong = await cdp.evaluate(
+      `[...document.querySelectorAll('.tchar .ch')].map(e=>e.textContent).join('')`,
+    );
+    console.log(
+      `[screenshot] 重做后：已武装=${armed2} 指示灯类=${JSON.stringify(indicatorDump)} 目标=${JSON.stringify(targetWrong)}`,
+    );
+    check(armed2, '重做本条目后可以重新武装');
+    // 目标第一个字符是 E 就发 T，反之发 E —— 保证一定发错
+    await keyer.char(targetWrong[0] === 'E' ? 'T' : 'E');
+    await delay(900);
     const style2 = await cdp.evaluate(`(() => {
       const cell = document.querySelector('.tchar.done.wrong');
-      if (!cell) return null;
-      return { text: cell.innerText.replace(/\\n/g,' '), chColor: getComputedStyle(cell.querySelector('.ch')).color };
+      if (!cell) return { found: false, cells: [...document.querySelectorAll('.tchar')].map(c=>c.className) };
+      return { found: true, text: cell.innerText.replace(/\\n/g,' '), chColor: getComputedStyle(cell.querySelector('.ch')).color };
     })()`);
     console.log(`[screenshot] 判错的字符样式: ${JSON.stringify(style2)}`);
-    check(!!style2, '故意发错时出现"判错"的字符（.tchar.done.wrong）');
-    check(style2?.chColor === 'rgb(255, 107, 107)', '判错字符的文字是红色', style2?.chColor ?? '');
+    check(style2.found === true, '故意发错时出现"判错"的字符（.tchar.done.wrong）');
+    check(style2.chColor === 'rgb(255, 107, 107)', '判错字符的文字是红色', style2.chColor ?? '');
     await shot('06-keyed-wrong');
 
     // 7) 长报文：选第 9 课（短 QSO），拍几条看逐字判定
@@ -487,8 +523,7 @@ async function main() {
     await shot('07-lessons');
     await click(byText('.lesson', '第 5 课'));
     await delay(800);
-    await click(byText('button', '武装'));
-    await delay(200);
+    await setArmed(true);
     const targetLong = await cdp.evaluate(`[...document.querySelectorAll('.tchar .ch')].map(e=>e.textContent).join('')`);
     console.log(`[screenshot] 长报文目标: ${JSON.stringify(targetLong)}`);
     // 只拍前 6 个字符，看看"已判对 + 待定"混合的样子
