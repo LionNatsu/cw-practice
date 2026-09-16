@@ -501,6 +501,22 @@ async function main() {
     console.log(`[screenshot] 居中: 字符中点 ${center.glyph}，舞台中点 ${center.stage}`);
     const off = Math.abs((center.glyph ?? 0) - (center.stage ?? 0));
     check(center.ok && off <= 4, `中心字居中（偏差 ${off}px）`);
+    // 当前字那条横线要画在字符上：画在格子上会跟着词间隔一起变长
+    const underline = JSON.parse(
+      await cdp.evaluate(`(() => {
+        const cell = document.querySelector(".cell[data-dist='0']");
+        const ch = cell.querySelector('.glyph .ch');
+        const after = getComputedStyle(cell, '::after');
+        return JSON.stringify({
+          afterContent: after.content,
+          border: getComputedStyle(ch).borderBottomWidth,
+          chWidth: Math.round(ch.getBoundingClientRect().width),
+        });
+      })()`),
+    );
+    console.log(`[screenshot] 当前字横线: ${JSON.stringify(underline)}`);
+    check(underline.afterContent === 'none', '横线不挂在格子上（否则会跟着词间隔变长）');
+    check(underline.border === '2px' && underline.chWidth < 80, `横线宽度跟着字符（字符宽 ${underline.chWidth}px）`);
     // 字符带里词间隔要看得出来：词与词之间的空档应明显大于词内字距
     const spacing = JSON.parse(
       await cdp.evaluate(`(() => {

@@ -372,27 +372,20 @@ label.inline {
   text-decoration-thickness: 3px;
 }
 
-/* 当前字符下面一条短线，取代原来的“当前”标签 */
-.cell[data-dist='0']::after {
-  content: '';
-  display: block;
-  width: 100%;
-  height: 2px;
-  background: var(--fg);
-  margin-top: 10px;
+/*
+ * 当前字符下面一条短线，取代原来的“当前”标签。
+ *
+ * 注意画在**字符**上，不是画在格子上：格子现在含词间隔，
+ * 画在格子上这条线会跟着间隔一起变长（看起来像多了一截白线）。
+ */
+.cell[data-dist='0'] .glyph .ch {
+  display: inline-block;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--fg);
 }
 
-/* 末尾的补偿空位不画横线（它不是字） */
-.cell.pad::after {
-  display: none;
-}
-
-.cell[data-dist='0'].correct::after {
-  background: var(--good);
-}
-
-.cell[data-dist='0'].wrong::after {
-  background: var(--bad);
+.cell[data-dist='0'].correct .glyph .ch {
+  border-color: var(--good);
 }
 
 /* 码形提示：当前这个字该发成什么，画成点划的形状 */
