@@ -87,7 +87,8 @@ export class PracticeView {
     this.sentEl = h('div', { class: 'sent', id: 'sent' });
     this.stageEl = h('div', { class: 'stage live', id: 'stage' }, this.patternEl, this.ribbonEl, this.sentEl);
 
-    this.glossEl = h('div', { class: 'gloss', id: 'gloss' }, item.gloss ?? item.text);
+    // 有逐词直译的条目不再重复整句意思；只有连发练习那种没有直译的才写一行说明
+    this.glossEl = h('div', { class: 'gloss', id: 'gloss' }, item.gloss ?? '');
     this.lyricsEl = h('div', { class: 'lyrics', id: 'lyrics' });
     const under = h('div', { class: 'under-stage' }, this.lyricsEl, this.glossEl);
 
@@ -183,7 +184,7 @@ export class PracticeView {
     this.wrongSeq = 0;
     this.commandSeq = 0;
     this.lastFrame = '';
-    this.glossEl.textContent = this.app.currentItem.gloss ?? this.app.currentItem.text;
+    this.glossEl.textContent = this.app.currentItem.gloss ?? '';
     this.renderState(this.engine.state, true);
   }
 
@@ -323,7 +324,8 @@ export class PracticeView {
    * 透镜式字符带：中心最大，两侧递减。
    *
    * 中心字永远压在画面中线上，所以条目开头和结尾也要摆出等量的空位
-   * （空位用看不见的同宽字符撑着，等宽字体下每个字符宽度一样）。
+   * （空位用看不见的同宽字符撑着，宽度照抄它在中心另一侧的对称格，
+   * 这样词间隔也能照实显示，中心又不会跑偏）。
    */
   private renderRibbon(st: PracticeState): void {
     const total = st.target.length;
@@ -331,33 +333,59 @@ export class PracticeView {
     if (total === 0) return;
     // 中心对准“下一个要发的字”；整条发完了就停在最后一个字上
     const focus = Math.min(st.cursor, total - 1);
+    /** 第 i 格是不是一个词的开头（词之间要空开一点）。 */
+    const startsWord = (i: number): boolean => {
+      const t = st.target[i];
+      if (!t) return false;
+      return i === 0 || st.target[i - 1]!.groupIndex !== t.groupIndex;
+    };
 
     for (let i = focus - WINDOW; i <= focus + WINDOW; i++) {
       const dist = Math.min(5, Math.abs(i - focus));
       const t = st.target[i];
       if (!t) {
-        // 条目之外：留一个同宽的空位，别让中心字跑偏
+        // 条目之外：留一个空位，宽度（含词间隔）照抄对称格
+        const mirror = focus * 2 - i;
         this.ribbonEl.appendChild(
           h(
             'div',
-            { class: 'cell ghost', dataset: { dist: String(dist), word: '0' } },
-            h('div', { class: 'glyph' }, 'M'),
+            { class: 'cell ghost', dataset: { dist: String(dist), word: startsWord(mirror) ? '1' : '0' } },
+            this.glyphAt('M', startsWord(mirror)),
           ),
         );
         continue;
       }
-      const first = i === 0 || st.target[i - 1]!.groupIndex !== t.groupIndex;
+      // 中心字自己是一个词的开头时，它前面那份词间隔会把字挤出中线：
+      // 末尾补一个同宽的空位把它顶回来（空位不可见，不会看着像多了个空格）。
+      const lead = startsWord(i);
       this.ribbonEl.appendChild(
         h(
           'div',
           {
             class: `cell${i < st.cursor ? ' correct' : ''}`,
-            dataset: { dist: String(dist), word: first ? '1' : '0' },
+            dataset: { dist: String(dist), word: lead ? '1' : '0' },
           },
-          h('div', { class: 'glyph' }, displayChar(t.ch)),
+          this.glyphAt(displayChar(t.ch), lead),
         ),
       );
     }
+    if (startsWord(focus)) {
+      this.ribbonEl.appendChild(
+        h(
+          'div',
+          { class: 'cell ghost pad', dataset: { dist: '0', word: '0' } },
+          h('div', { class: 'glyph' }, h('i', { class: 'gap' })),
+        ),
+      );
+    }
+  }
+
+  /** 一个字形：按需要在字符前面塞一份词间隔。 */
+  private glyphAt(ch: string, lead: boolean): HTMLElement {
+    const glyph = h('div', { class: 'glyph' });
+    if (lead) glyph.appendChild(h('i', { class: 'gap' }));
+    glyph.appendChild(h('span', { class: 'ch' }, ch));
+    return glyph;
   }
 
   /**

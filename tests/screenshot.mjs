@@ -487,21 +487,55 @@ async function main() {
     const center = JSON.parse(
       await cdp.evaluate(`(() => {
         const cell = document.querySelector(".cell[data-dist='0']");
-        const glyph = cell?.querySelector('.glyph');
-        if (!glyph) return JSON.stringify({ ok: false });
-        const r = glyph.getBoundingClientRect();
+        const ch = cell?.querySelector('.glyph .ch');
+        if (!ch) return JSON.stringify({ ok: false });
+        const r = ch.getBoundingClientRect();
         const s = document.getElementById('stage').getBoundingClientRect();
         return JSON.stringify({
           ok: true,
           glyph: Math.round(r.left + r.width / 2),
           stage: Math.round(s.left + s.width / 2),
-          viewport: Math.round(window.innerWidth / 2),
         });
       })()`),
     );
-    console.log(`[screenshot] 居中: 字形中点 ${center.glyph}，舞台中点 ${center.stage}，视口中点 ${center.viewport}`);
+    console.log(`[screenshot] 居中: 字符中点 ${center.glyph}，舞台中点 ${center.stage}`);
     const off = Math.abs((center.glyph ?? 0) - (center.stage ?? 0));
     check(center.ok && off <= 4, `中心字居中（偏差 ${off}px）`);
+    // 字符带里词间隔要看得出来：词与词之间的空档应明显大于词内字距
+    const spacing = JSON.parse(
+      await cdp.evaluate(`(() => {
+        const all = [...document.querySelectorAll('.cell')].filter((c) => !c.classList.contains('ghost'))
+          .map((c) => ({ word: c.dataset.word === '1', r: c.querySelector('.glyph .ch').getBoundingClientRect() }));
+        if (all.length < 3) return JSON.stringify({ ok: false });
+        const gaps = [];
+        for (let i = 1; i < all.length; i++) gaps.push({ word: all[i].word, gap: Math.round(all[i].r.left - all[i - 1].r.right) });
+        const inWord = gaps.filter((g) => !g.word).map((g) => g.gap);
+        const between = gaps.filter((g) => g.word).map((g) => g.gap);
+        return JSON.stringify({ ok: true, inWord, between });
+      })()`),
+    );
+    const minBetween = Math.min(...(spacing.between ?? [Infinity]));
+    const maxInWord = Math.max(...(spacing.inWord ?? [0]));
+    console.log(`[screenshot] 字距: 词内 ${JSON.stringify(spacing.inWord)} / 词间 ${JSON.stringify(spacing.between)}`);
+    check(
+      spacing.ok && minBetween > maxInWord * 1.5,
+      `词间隔明显大于字距（词内最大 ${maxInWord}px，词间最小 ${minBetween}px）`,
+    );
+    // 空位格不能把字符带里的字弄乱：可见的字应当就是这条报文的开头
+    const ribbonText = JSON.parse(
+      await cdp.evaluate(`(() => {
+        const chars = [...document.querySelectorAll('.cell')].filter((c) => !c.classList.contains('ghost'))
+          .map((c) => c.querySelector('.glyph .ch')?.textContent ?? '');
+        const words = [...document.querySelectorAll('.lyrics .line.now .word')]
+          .map((w) => [...w.querySelectorAll('.code span')].map((s) => s.textContent).join(''));
+        return JSON.stringify({ chars: chars.join(''), target: words.join('') });
+      })()`),
+    );
+    console.log(`[screenshot] 字符带可见字: ${JSON.stringify(ribbonText.chars)}（本条 ${JSON.stringify(ribbonText.target)}）`);
+    check(
+      ribbonText.chars.length > 0 && ribbonText.target.startsWith(ribbonText.chars),
+      `字符带里显示的是本条报文的开头（${ribbonText.chars}）`,
+    );
     await shot('02b-lens');
 
     // 回到第 1 课第 1 条（单字 E），走一遍“拍对”的流程

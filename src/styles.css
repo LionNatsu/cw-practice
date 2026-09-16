@@ -350,6 +350,17 @@ label.inline {
   padding: 0 8px;
 }
 
+/* 词与词之间空开一点：认一个词是整体，比认单个字母快 */
+.glyph .gap {
+  display: inline-block;
+  width: 0.9em;
+}
+
+/* 末尾那块补偿空位：只要宽度，不要内边距 */
+.cell.pad .glyph {
+  padding: 0;
+}
+
 /* 已判定的字符只改颜色，不改变大小 */
 .cell.correct .glyph {
   color: var(--good);
@@ -369,6 +380,11 @@ label.inline {
   height: 2px;
   background: var(--fg);
   margin-top: 10px;
+}
+
+/* 末尾的补偿空位不画横线（它不是字） */
+.cell.pad::after {
+  display: none;
 }
 
 .cell[data-dist='0'].correct::after {

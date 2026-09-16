@@ -46,16 +46,32 @@ test('文本时长按 PARIS 标准算', () => {
 
 /* ============================ 课程内容 ============================ */
 
-test('课程内容全部可以用码表发出来，且都带中文含义', () => {
+test('课程内容全部可以用码表发出来，且每条都有中文', () => {
   for (const lesson of LESSONS) {
     const items = expandLesson(lesson, 'BG1ABC');
     assert.ok(items.length > 0, `${lesson.id} 不该为空`);
     assert.ok(lesson.title.length > 0 && lesson.summary.length > 0, `${lesson.id} 缺少标题或说明`);
     for (const it of items) {
-      assert.ok(it.gloss && it.gloss.length > 0, `${lesson.id} 的条目 "${it.text}" 缺少中文含义`);
+      // 要么有逐词直译，要么有整句说明 —— 不能两者都没有
+      const words = (it.words ?? []).filter((w) => w.length > 0);
+      assert.ok(
+        words.length > 0 || (it.gloss && it.gloss.length > 0),
+        `${lesson.id} 的条目 "${it.text}" 既没有逐词直译也没有句意`,
+      );
       const bad = unsupportedChars(it.text);
       assert.deepEqual(bad, [], `${lesson.id} 的条目 "${it.text}" 含无法发送的字符 ${bad.join(',')}`);
       assert.ok(textDurationMs(it.text, 100) > 0);
+    }
+  }
+});
+
+test('有逐词直译的条目不再写整句释义', () => {
+  for (const lesson of LESSONS) {
+    for (const it of lesson.items) {
+      if (it.words?.length) {
+        assert.equal(it.gloss, undefined, `${lesson.id} 的 "${it.text}" 有逐词直译，就不该再写句意`);
+        assert.ok(it.words.some((w) => w.length > 0), `${lesson.id} 的 "${it.text}" 逐词直译全是空的`);
+      }
     }
   }
 });

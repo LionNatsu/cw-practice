@@ -68,7 +68,7 @@ export class App {
   }
 
   /** 当前课程展开后的条目（已替换呼号）。 */
-  get items(): Array<{ text: string; gloss?: string; note?: string }> {
+  get items(): LessonItem[] {
     return expandLesson(this.lesson, this.settings.callsign);
   }
 

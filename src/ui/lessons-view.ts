@@ -87,7 +87,7 @@ export class LessonsView {
           },
           h('span', { class: 'idx' }, String(i + 1)),
           h('span', { class: 'txt' }, it.text),
-          h('span', { class: 'g' }, it.gloss ?? ''),
+          h('span', { class: 'g' }, it.gloss ?? (it.words ?? []).join(' ')),
         ),
       );
     });
