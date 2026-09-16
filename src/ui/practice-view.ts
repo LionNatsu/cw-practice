@@ -141,13 +141,11 @@ export class PracticeView {
         // 浏览器要求音频由用户手势启动。第一下按键就是手势，不用先点按钮。
         void this.app.audio.resume();
         this.app.audio.keyDown();
-        this.stageEl.classList.add('keying');
         this.engine.keyDown(down);
       },
       onUp: (edge) => this.handleEdge(edge),
       onIgnored: (edge) => {
         this.engine.keyUp(edge.up);
-        this.stageEl.classList.remove('keying');
         if (edge.ignoreReason) toast(`已忽略 ${Math.round(edge.duration)}ms：${edge.ignoreReason}`, 'warn');
       },
     });
@@ -157,7 +155,6 @@ export class PracticeView {
 
   private handleEdge(edge: KeyEdge): void {
     this.app.audio.keyUp();
-    this.stageEl.classList.remove('keying');
     if (this.paused) return;
     if (edge.ignored) {
       toast(`已忽略 ${Math.round(edge.duration)}ms：${edge.ignoreReason ?? ''}`, 'warn');
@@ -322,19 +319,33 @@ export class PracticeView {
     }
   }
 
-  /** 透镜式字符带：中心最大，两侧递减。 */
+  /**
+   * 透镜式字符带：中心最大，两侧递减。
+   *
+   * 中心字永远压在画面中线上，所以条目开头和结尾也要摆出等量的空位
+   * （空位用看不见的同宽字符撑着，等宽字体下每个字符宽度一样）。
+   */
   private renderRibbon(st: PracticeState): void {
     const total = st.target.length;
     clear(this.ribbonEl);
     if (total === 0) return;
     // 中心对准“下一个要发的字”；整条发完了就停在最后一个字上
     const focus = Math.min(st.cursor, total - 1);
-    const from = Math.max(0, focus - WINDOW);
-    const to = Math.min(total - 1, focus + WINDOW);
 
-    for (let i = from; i <= to; i++) {
-      const t = st.target[i]!;
+    for (let i = focus - WINDOW; i <= focus + WINDOW; i++) {
       const dist = Math.min(5, Math.abs(i - focus));
+      const t = st.target[i];
+      if (!t) {
+        // 条目之外：留一个同宽的空位，别让中心字跑偏
+        this.ribbonEl.appendChild(
+          h(
+            'div',
+            { class: 'cell ghost', dataset: { dist: String(dist), word: '0' } },
+            h('div', { class: 'glyph' }, 'M'),
+          ),
+        );
+        continue;
+      }
       const first = i === 0 || st.target[i - 1]!.groupIndex !== t.groupIndex;
       this.ribbonEl.appendChild(
         h(
@@ -396,39 +407,34 @@ export class PracticeView {
       return;
     }
     if (st.pressCount === 0) {
-      this.sentEl.appendChild(h('span', { class: 'quiet' }, '直接拍'));
+      this.sentEl.appendChild(h('span', { class: 'quiet lead' }, '直接拍：短按是点，按住约三倍时长是划'));
       return;
     }
-    // 字与字之间：告诉人还要静多久 —— 字间 3 个单位，换词要静到 7 个
-    this.sentEl.appendChild(this.silenceMeter(st));
+    // 只有“该换词了”才提示：出现一下，停够了就消失，接着发下一个字
+    if (st.wordBoundary && st.silenceMs < st.unitMs * THRESHOLDS.wordGapUnits) {
+      this.sentEl.appendChild(this.wordGapMeter(st));
+    }
   }
 
   /**
-   * 静音条：真实拍发就是靠停顿分字分词的，所以把“该静多久”直接画出来。
-   * 换词的时候目标点是 7 个单位，同一个词里是 3 个。
+   * 词间隔提示条：换词的时候才出现，静到 7 个单位就消失。
+   *
+   * 字与字之间不用提示 —— 那是 3 个单位，拍几下就顺手了；
+   * 词间隔才是新手最容易含糊的地方。
    */
-  private silenceMeter(st: PracticeState): HTMLElement {
-    const units = st.silenceMs / Math.max(1, st.unitMs);
-    const goal = st.wordBoundary ? THRESHOLDS.wordGapUnits : THRESHOLDS.charGapUnits;
-    const fill = Math.min(1, units / THRESHOLDS.wordGapUnits);
-    const charTick = (THRESHOLDS.charGapUnits / THRESHOLDS.wordGapUnits) * 100;
-    const done = units >= goal;
+  private wordGapMeter(st: PracticeState): HTMLElement {
+    const goal = THRESHOLDS.wordGapUnits;
+    const units = Math.min(goal, st.silenceMs / Math.max(1, st.unitMs));
     return h(
       'span',
-      { class: `gap-meter${done ? ' done' : ''}`, id: 'gap-meter' },
+      { class: 'gap-meter', id: 'gap-meter' },
       h(
         'span',
         { class: 'track' },
-        h('i', { class: 'fill', style: { width: `${(fill * 100).toFixed(0)}%` } }),
-        h('i', { class: 'tick char', style: { left: `${charTick.toFixed(0)}%` } }),
+        h('i', { class: 'fill', style: { width: `${((units / goal) * 100).toFixed(0)}%` } }),
         h('i', { class: 'tick word' }),
       ),
-      h(
-        'span',
-        { class: 'hint' },
-        st.wordBoundary ? '换词：停到 7 个单位' : '字间：停到 3 个单位',
-        h('b', {}, `${units.toFixed(1)}`),
-      ),
+      h('span', { class: 'hint' }, '词间隔', h('b', {}, `${units.toFixed(1)}`), ` / ${goal}`),
     );
   }
 

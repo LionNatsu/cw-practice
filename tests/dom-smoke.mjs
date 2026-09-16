@@ -437,7 +437,8 @@ check(!!practiceTab, '找到“练习” tab');
 practiceTab?.click();
 advance(60);
 
-const tchars = document.querySelectorAll('.cell');
+const realCells = () => document.querySelectorAll('.cell').filter((c) => !c.classList.contains('ghost'));
+const tchars = realCells();
 check(tchars.length > 0, `目标字符渲染出来了（${tchars.length} 个）`);
 check(document.querySelectorAll('.stage').length === 1, '手键区渲染出来了');
 check(document.querySelectorAll('.pattern-hint').length === 1, '当前字符的码形提示渲染出来了');
@@ -515,6 +516,7 @@ function keyPattern(pattern, dit) {
 // 目标文本的第一条（第 1 课是单字符）
 const targetText = document
   .querySelectorAll('.cell')
+  .filter((c) => !c.classList.contains('ghost'))
   .map((c) => c.querySelector('.glyph')?.textContent ?? '')
   .join('');
 console.log(`[smoke] 本条目标文本: ${JSON.stringify(targetText)}`);
@@ -535,7 +537,7 @@ const correctCells = document.querySelectorAll('.cell.correct').length;
 check(correctCells > 0, `有字符被判对（${correctCells} 个 .cell.correct）`);
 
 // 中心字符的透镜尺寸：字级最大、两侧递减（用 dataset.dist 断言，DOM 桩读不到 computed style）
-const dists = document.querySelectorAll('.cell').map((c) => c.dataset.dist);
+const dists = realCells().map((c) => c.dataset.dist);
 check(dists.includes('0'), `中心字符带 dist=0 标记：${JSON.stringify(dists)}`);
 
 // 用手键直接操作：发 AR 应当换到下一条。

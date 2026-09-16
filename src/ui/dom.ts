@@ -64,10 +64,6 @@ export function patternMini(pattern: string): HTMLElement {
   return wrap;
 }
 
-export function fmtPct(v: number, digits = 0): string {
-  return `${(v * 100).toFixed(digits)}%`;
-}
-
 export function fmtMs(v: number): string {
   return Number.isFinite(v) ? `${Math.round(v)}ms` : '--';
 }

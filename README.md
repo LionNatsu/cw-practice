@@ -15,7 +15,7 @@
 ```bash
 pnpm install          # 装开发依赖（只有 vite / typescript / @types/node）
 pnpm dev              # 开发服务器，默认 http://localhost:5173
-pnpm test             # 核心逻辑单元测试（Node 原生，零依赖，36 个用例）
+pnpm test             # 核心逻辑单元测试（Node 原生，零依赖，44 个用例）
 pnpm build            # tsc 类型检查 + vite 打包到 dist/
 pnpm build:nodeps     # 零依赖构建（只用 Node，见下文“为什么有两套构建”）
 pnpm verify:dist      # 产物自检：路径/依赖是否能在子目录下正常部署
@@ -51,9 +51,9 @@ pnpm test:browser     # 用无头 Chrome 真点真拍并截图（见“浏览器
 
 | 命令 | 做什么 |
 | --- | --- |
-| `pnpm test` | 引擎行为规格（拍错不放过、前缀不判错、50~250ms 手速自适应）、码表/课程/进度、音频调度（36+6 例） |
+| `pnpm test` | 引擎行为规格（拍错不放过、前缀不判错、50~250ms 手速自适应）、码表/课程/进度、音频调度（38+6 例） |
 | `pnpm test:smoke` | 构建产物 + 最小 DOM 桩，真跑一遍 App：路由、渲染、拍一段字、发 AR / BK 换条、结算弹窗（38 项断言） |
-| `pnpm test:browser` | 用 CDP 驱动无头 Chrome 打开页面，真的按下鼠标左键拍发，截图并断言（34 项） |
+| `pnpm test:browser` | 用 CDP 驱动无头 Chrome 打开页面，真的按下鼠标左键拍发，截图并断言（39 项） |
 | `pnpm test:audio:browser` | 无头 Chrome 里离线渲染侧音波形，按 5ms 窗口分析包络（本地按需跑） |
 
 `pnpm test:browser` 需要先起静态服务器：

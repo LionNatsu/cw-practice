@@ -289,20 +289,6 @@ label.inline {
   position: relative;
 }
 
-/* 按下时整块舞台的边界亮起，作为最直接的“在发报”反馈 */
-.stage::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 1px solid transparent;
-  pointer-events: none;
-  transition: border-color 0.06s linear;
-}
-
-.stage.keying::after {
-  border-color: var(--key-color, var(--dit));
-}
-
 .ribbon {
   display: flex;
   align-items: flex-end;
@@ -362,11 +348,6 @@ label.inline {
   font-family: var(--mono);
   color: var(--fg);
   padding: 0 8px;
-}
-
-/* 词与词之间留出空档，报文才有分词断句 */
-.cell[data-word='1'] .glyph {
-  margin-left: 0.6em;
 }
 
 /* 已判定的字符只改颜色，不改变大小 */
@@ -501,13 +482,9 @@ label.inline {
   margin-left: 6px;
 }
 
-/* 停够了：整条变绿，告诉人可以发下一个字了 */
-.gap-meter.done .fill {
-  background: var(--good);
-}
-
-.gap-meter.done .hint {
-  color: var(--fg-dim);
+/* 条目之外的空位：撑住宽度，让中心字始终在画面中线上 */
+.cell.ghost .glyph {
+  visibility: hidden;
 }
 
 /* 拍错的负反馈：一个大问号 + 对方听到的内容，就摆在发报条的位置 */

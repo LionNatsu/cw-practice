@@ -36,7 +36,7 @@ export class StatsView {
             totalSeen ? `${(((totalSeen - totalWrong) / totalSeen) * 100).toFixed(1)}%` : '--',
             `${totalSeen - totalWrong} / ${totalSeen}`,
           ),
-          meter('练过的字', String(charEntries.length), `共 ${Object.keys(ALL_CHAR_TO_PATTERN).length}`),
+          meter('练过的字', String(charEntries.length), `共 ${Object.keys(ALL_CHAR_TO_PATTERN).length} 个字符`),
         ),
       ),
     );

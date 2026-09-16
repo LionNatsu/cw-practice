@@ -457,7 +457,7 @@ async function main() {
     await click(byText('.tab', '练习'));
     await delay(500);
     await shot('02-practice-idle');
-    const cells = await cdp.evaluate(`document.querySelectorAll('.cell').length`);
+    const cells = await cdp.evaluate(`[...document.querySelectorAll('.cell')].filter((c) => !c.classList.contains('ghost')).length`);
     check(cells > 0, `练习页渲染出 ${cells} 个字符`);
 
     // 换到第 9 课（一问一答）的一条较长报文，用来看透镜的尺寸递减
@@ -467,7 +467,7 @@ async function main() {
     console.log(`[screenshot] 点第 9 课: ${lessonClicked}`);
     await delay(800);
     const longTarget = await cdp.evaluate(
-      `[...document.querySelectorAll('.cell .glyph')].map(e=>e.textContent).join('')`,
+      `[...document.querySelectorAll('.cell .glyph')].filter((g) => !g.closest('.ghost')).map(e=>e.textContent).join('')`,
     );
     check(longTarget.length >= 8, `长报文已就位（${JSON.stringify(longTarget)}）`);
     const lens = await cdp.evaluate(`(() => {
@@ -483,6 +483,25 @@ async function main() {
     check(lensObj.d0 >= 80, `中心字符应最大（≥80px），实际 ${lensObj.d0}px`);
     check(lensObj.d1 !== null && lensObj.d1 < lensObj.d0, `相邻字符应更小（${lensObj.d1} < ${lensObj.d0}）`);
     check(lensObj.d2 !== null && lensObj.d2 < lensObj.d1, `再外侧应更小（${lensObj.d2} < ${lensObj.d1}）`);
+    // 透镜必须真的居中：中心字的字形中点要压在画面中线上
+    const center = JSON.parse(
+      await cdp.evaluate(`(() => {
+        const cell = document.querySelector(".cell[data-dist='0']");
+        const glyph = cell?.querySelector('.glyph');
+        if (!glyph) return JSON.stringify({ ok: false });
+        const r = glyph.getBoundingClientRect();
+        const s = document.getElementById('stage').getBoundingClientRect();
+        return JSON.stringify({
+          ok: true,
+          glyph: Math.round(r.left + r.width / 2),
+          stage: Math.round(s.left + s.width / 2),
+          viewport: Math.round(window.innerWidth / 2),
+        });
+      })()`),
+    );
+    console.log(`[screenshot] 居中: 字形中点 ${center.glyph}，舞台中点 ${center.stage}，视口中点 ${center.viewport}`);
+    const off = Math.abs((center.glyph ?? 0) - (center.stage ?? 0));
+    check(center.ok && off <= 4, `中心字居中（偏差 ${off}px）`);
     await shot('02b-lens');
 
     // 回到第 1 课第 1 条（单字 E），走一遍“拍对”的流程
@@ -625,12 +644,28 @@ async function main() {
     await delay(800);
     console.log(`[screenshot] 长条目拍发中=${await isArmed()}`);
     const targetLong = await cdp.evaluate(
-      `[...document.querySelectorAll(".cell .glyph")].map(e=>e.textContent).join('')`,
+      `[...document.querySelectorAll('.cell .glyph')].filter((g) => !g.closest('.ghost')).map(e=>e.textContent).join('')`,
     );
     console.log(`[screenshot] 长报文目标: ${JSON.stringify(targetLong)}`);
     // 逐字过判定：每拍完一个字，等它定稿（停顿够久），才轮到下一个字
-    for (const ch of targetLong.slice(0, 3)) {
-      if (!(await keyer.char(ch))) break;
+    let gapMeter = null;
+    for (let i = 0; i < 3 && i < targetLong.length; i++) {
+      if (!(await keyer.char(targetLong[i]))) break;
+      // 拍完第二个字，下一个字正好换词 —— 这时候词间隔提示条该出现
+      if (i === 1) {
+        await delay(200);
+        gapMeter = JSON.parse(
+          await cdp.evaluate(`(() => {
+            const m = document.getElementById('gap-meter');
+            return JSON.stringify({
+              has: !!m,
+              hint: m?.querySelector('.hint')?.innerText.replace(/\\n/g, ' ') ?? '',
+              fill: m?.querySelector('.fill')?.style.width ?? '',
+            });
+          })()`),
+        );
+        await shot('07b-word-gap');
+      }
       await delay(700);
     }
     await delay(500);
@@ -644,12 +679,16 @@ async function main() {
       glosses: [...document.querySelectorAll('.lyrics .gl')].map((e) => e.textContent),
       prev: !!document.querySelector('.lyrics .line.prev'),
       next: !!document.querySelector('.lyrics .line.next'),
-      gapHint: document.querySelector('.gap-meter .hint')?.innerText.replace(/\\n/g, ' ') ?? '',
-      gapFill: document.querySelector('.gap-meter .fill')?.style.width ?? '',
+      meterGone: !document.getElementById('gap-meter'),
       focus: document.activeElement ? document.activeElement.tagName : 'none',
     })`);
     console.log(`[screenshot] 长报文状态: ${longState}`);
     const ls = JSON.parse(longState);
+    console.log(`[screenshot] 词间隔提示条: ${JSON.stringify(gapMeter)}`);
+    check(!!gapMeter?.has, '换词时出现词间隔提示条');
+    check(/词间隔/.test(gapMeter?.hint ?? ''), `提示条写着词间隔：${gapMeter?.hint}`);
+    check(!!gapMeter?.fill && gapMeter.fill !== '0%', `提示条在走：${gapMeter?.fill}`);
+    check(ls.meterGone, '停够之后提示条自己消失');
     check(ls.correct > 0, `逐字过：拍对的字被认下来（${ls.correct} 个）`);
     check(!!ls.center, '中心位置始终有字符（透镜聚焦）');
     check(ls.center === targetLong[ls.correct], `中心应对准下一个要发的字（认下 ${ls.correct} 个，中心是 ${ls.center}，下一个应是 ${targetLong[ls.correct]}）`);
@@ -659,9 +698,6 @@ async function main() {
       `每个词下面都有直译（${ls.words} 个词 / ${ls.glosses.length} 条）：${JSON.stringify(ls.glosses)}`,
     );
     check(!!ls.next, '下一条邻句也摆出来了（歌词式滚动）');
-    console.log(`[screenshot] 静音条: ${JSON.stringify(ls.gapHint)} 填充 ${ls.gapFill}`);
-    check(/个单位/.test(ls.gapHint), '字与字之间给出静音提示条');
-    check(ls.gapFill !== '' && ls.gapFill !== '0%', `静音条真的在走：${ls.gapFill}`);
 
     // 7b) 全程用手键操作：发 AR（.-.-.）应当换到下一条，不用摸鼠标
     const itemBefore = await cdp.evaluate(`document.getElementById('item-label')?.textContent ?? ''`);

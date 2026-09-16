@@ -315,16 +315,3 @@ export function expandLesson(lesson: Lesson, callsign: string): LessonItem[] {
     gloss: it.gloss ? resolvePlaceholders(it.gloss, callsign) : undefined,
   }));
 }
-
-/** 所有课程里出现过的字符（用来判断哪些字你已经练过）。 */
-export function allLessonChars(): Set<string> {
-  const set = new Set<string>();
-  for (const l of LESSONS) {
-    for (const it of l.items) {
-      for (const ch of resolvePlaceholders(it.text, 'BG1ABC')) {
-        if (ch !== ' ') set.add(ch);
-      }
-    }
-  }
-  return set;
-}

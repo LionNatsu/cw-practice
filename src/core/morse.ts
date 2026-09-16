@@ -90,13 +90,6 @@ export const PATTERN_TO_CHAR: Readonly<Record<Pattern, string>> = Object.fromEnt
   Object.entries(CHAR_TO_PATTERN).map(([ch, pat]) => [pat, ch]),
 );
 
-/** 把码元的 dit/dah 序列转成码形字符串。 */
-export function symbolsToPattern(symbols: readonly ('dit' | 'dah')[]): Pattern {
-  let out = '';
-  for (const s of symbols) out += s === 'dit' ? '.' : '-';
-  return out;
-}
-
 /** 把码形字符串转成码元序列。 */
 export function patternToSymbols(pattern: Pattern): ('dit' | 'dah')[] {
   const out: ('dit' | 'dah')[] = [];
@@ -138,78 +131,6 @@ export function textDurationMs(text: string, ditMs: number): number {
     if (w < words.length - 1) total += 7 * ditMs;
   }
   return total;
-}
-
-/** 前缀树节点。 */
-export interface MorseNode {
-  /** 若这是一个完整码字，则给出其文本。 */
-  text?: string;
-  children: Map<'dit' | 'dah', MorseNode>;
-}
-
-export function createNode(): MorseNode {
-  return { children: new Map() };
-}
-
-export interface MorseTree {
-  root: MorseNode;
-  /** 码形 → 字符（可包含自定义）。 */
-  lookup: Map<Pattern, string>;
-  /** 最长码形长度（码元数），用于限制搜索深度。 */
-  maxDepth: number;
-}
-
-/**
- * 建立摩尔斯前缀树。
- * @param entries 可选的额外码字（例如课程里自定义的记号）。
- */
-export function buildTree(entries: Readonly<Record<string, Pattern>> = {}): MorseTree {
-  const root = createNode();
-  const lookup = new Map<Pattern, string>(Object.entries(PATTERN_TO_CHAR));
-  let maxDepth = 0;
-  const all: Record<string, Pattern> = { ...CHAR_TO_PATTERN, ...PROSIGNS, ...entries };
-  for (const [text, pattern] of Object.entries(all)) {
-    if (!pattern) continue;
-    lookup.set(pattern, text);
-    let node = root;
-    const sym = patternToSymbols(pattern);
-    for (const s of sym) {
-      let next = node.children.get(s);
-      if (!next) {
-        next = createNode();
-        node.children.set(s, next);
-      }
-      node = next;
-    }
-    node.text = text;
-    maxDepth = Math.max(maxDepth, sym.length);
-  }
-  return { root, lookup, maxDepth };
-}
-
-/** 从根节点沿码元走一步。 */
-export function step(node: MorseNode, kind: 'dit' | 'dah'): MorseNode | undefined {
-  return node.children.get(kind);
-}
-
-/** 查一个码形对应的字符（不区分自定义码字）。 */
-export function decodePattern(pattern: Pattern, extra: Readonly<Record<string, Pattern>> = {}): string | undefined {
-  if (extra) {
-    for (const [text, pat] of Object.entries(extra)) if (pat === pattern) return text;
-  }
-  return PATTERN_TO_CHAR[pattern];
-}
-
-/** 把文本转成码形序列，非法字符抛错。 */
-export function textToPatterns(text: string): Array<{ ch: string; pattern: Pattern }> {
-  const out: Array<{ ch: string; pattern: Pattern }> = [];
-  for (const raw of text.toUpperCase()) {
-    if (raw === ' ' || raw === '\n' || raw === '\t') continue;
-    const pat = ALL_CHAR_TO_PATTERN[raw];
-    if (!pat) throw new Error(`没有对应码形的字符: "${raw}"`);
-    out.push({ ch: raw, pattern: pat });
-  }
-  return out;
 }
 
 /** 校验一段文本能否用当前码表发出来，返回非法字符列表。 */
